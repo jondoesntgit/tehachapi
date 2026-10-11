@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { parseClock } from '../src/engine/clock'
 import { findSteps, requestRoute, STOP_CLEARANCE_M } from '../src/engine/routing'
-import { createInitialState, step } from '../src/engine/simulation'
+import { createInitialState } from '../src/engine/simulation'
 import type { GameState } from '../src/engine/types'
 import { graph, route, runUntil } from './helpers'
 
 /** T1 has just entered at WEST; nothing else is on the board. */
 function withT1(): GameState {
-  const state = { ...createInitialState(graph), timeS: parseClock('10:32') - 0.1 }
-  return step(graph, state, 0.1)
+  return createInitialState(graph)
 }
 
 /** T1 stopped mid-M2 and T2 just entered at EAST. */
