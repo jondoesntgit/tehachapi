@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { formatClock, parseClock } from '../engine/clock'
 import { getScheduleEntry, heldAtPortal, isLevelComplete, nextArrivalS } from '../engine/scheduler'
 import { TIME_SCALES, useGameStore } from '../store'
+import { Help } from './Help'
 
 const MESSAGE_MS = 3000
 
@@ -11,7 +12,8 @@ export function Hud() {
   const selectedTrainId = useGameStore((s) => s.selectedTrainId)
   const timeScale = useGameStore((s) => s.timeScale)
   const message = useGameStore((s) => s.message)
-  const { selectTrain, setTimeScale, skipAhead, clearMessage, restart } = useGameStore.getState()
+  const helpOpen = useGameStore((s) => s.helpOpen)
+  const { selectTrain, setTimeScale, skipAhead, clearMessage, setHelpOpen, restart } = useGameStore.getState()
 
   useEffect(() => {
     if (!message) return
@@ -41,6 +43,9 @@ export function Hud() {
           ))}
           <button disabled={!canSkip} onClick={skipAhead} aria-label="Skip to next train">
             ⏭
+          </button>
+          <button onClick={() => setHelpOpen(true)} aria-label="Help">
+            ?
           </button>
         </div>
       </header>
@@ -85,6 +90,8 @@ export function Hud() {
           </span>
         ))}
       </footer>
+
+      {helpOpen && <Help onClose={() => setHelpOpen(false)} />}
     </>
   )
 }

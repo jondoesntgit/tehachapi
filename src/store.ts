@@ -16,6 +16,8 @@ interface GameStore {
   selectedTrainId: string | null
   timeScale: number
   message: string | null
+  /** The help panel is open; the simulation is paused while it is. */
+  helpOpen: boolean
   /** Advances the simulation by a frame's worth of real time. */
   tick: (realDtS: number) => void
   selectTrain: (trainId: string | null) => void
@@ -23,6 +25,7 @@ interface GameStore {
   setTimeScale: (timeScale: number) => void
   skipAhead: () => void
   clearMessage: () => void
+  setHelpOpen: (open: boolean) => void
   restart: () => void
 }
 
@@ -52,9 +55,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   selectedTrainId: null,
   timeScale: 1,
   message: null,
+  helpOpen: false,
 
   tick: (realDtS) => {
-    const { graph, game, timeScale, selectedTrainId } = get()
+    const { graph, game, timeScale, selectedTrainId, helpOpen } = get()
+    if (helpOpen) return
     accumulatorS += Math.min(realDtS, MAX_FRAME_S) * timeScale
     let next = game
     while (accumulatorS >= FIXED_DT_S) {
@@ -90,6 +95,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   clearMessage: () => set({ message: null }),
+
+  setHelpOpen: (helpOpen) => set({ helpOpen }),
 
   restart: () => {
     accumulatorS = 0
