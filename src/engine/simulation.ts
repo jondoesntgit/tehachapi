@@ -7,14 +7,15 @@ import type { GameState, Train } from './types'
 /** Timestep the game loop feeds to `step`, in game seconds. */
 export const FIXED_DT_S = 0.1
 
+/** The level at its start time, with any train already due brought straight in. */
 export function createInitialState(graph: TrackGraph): GameState {
-  return {
+  return spawnDue(graph, {
     timeS: parseClock(graph.level.startTime),
     trains: [],
     reservations: {},
     pending: graph.level.schedule.map((entry) => entry.id),
     results: [],
-  }
+  })
 }
 
 /** Advances the whole game by `dtS` game seconds. */
