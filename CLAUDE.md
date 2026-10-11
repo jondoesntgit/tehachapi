@@ -2,90 +2,148 @@
 
 A browser-first railroad dispatching game. The player routes trains along a real-world-inspired local line by tapping a train, then tapping a destination. The route turns green, and the train accelerates, cruises, and brakes to a stop at the target. The primary device is an iPhone in landscape. It will later be packaged as a native iOS/Android app.
 
+- Repo: https://github.com/jondoesntgit/tehachapi
+- Live game: http://github.jamwheeler.com/tehachapi/ (GitHub Pages; redeploys on every push to `main`)
+
+## Status
+
+The MVP is done and deployed: level 1 is playable end to end.
+
+Working today:
+- Engine: track graph, routing with reservations, exact-stop physics, clock, scheduler, scoring.
+- SVG map, tap-to-route, HUD (clock, 1×/10×/60×, skip to next train, train list, route-refused messages).
+- CI and GitHub Pages deploy.
+
+Not built yet (see Roadmap):
+- Deadlock detection and any level-failed state.
+- Pan/zoom; the map only fits to the screen.
+- PWA install, Capacitor builds.
+- More than one level; level selection.
+
+## Commands
+
+```
+npm install
+npm run dev -- --host     # dev server; --host lets an iPhone on the same Wi-Fi connect
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
+
+Needs Node 26 (what CI uses). Every change must pass `npm run typecheck && npm run lint && npm test && npm run build`.
+
 ## Stack (decided)
 
 | Concern | Choice | Why |
 |---|---|---|
 | Language | TypeScript (strict) | Typed track graph and schedule schemas catch errors early |
 | UI | React | Declarative SVG and HUD/menus |
-| Build/dev | Vite | Fast dev server; `npm run dev -- --host` to test on iPhone over Wi-Fi |
-| Rendering | Plain SVG written as React JSX | No graphics library needed for lines + rectangles |
+| Build/dev | Vite | Fast dev server |
+| Rendering | Plain SVG written as React JSX | No graphics library needed for lines |
 | Game state | Pure TS engine + Zustand store for UI | Engine is testable without React |
 | Tests | Vitest | Engine physics, routing, and schedule logic |
+| Lint | ESLint (flat config) | Also enforces the engine/view split |
+| CI | GitHub Actions (`ci.yml`): typecheck, lint, test, build on PRs and `main` | |
+| Hosting | GitHub Pages (`deploy.yml`), deployed from `main` | |
+| Interim "app" (later) | PWA via `vite-plugin-pwa` | Add to Home Screen on iPhone = full-screen app with no App Store |
 | Native wrap (later) | Capacitor | Wraps this same web app into iOS/Android projects |
-| Interim "app" | PWA (manifest + service worker via `vite-plugin-pwa`) | Add to Home Screen on iPhone = full-screen app with no App Store |
-| CI | GitHub Actions: typecheck, lint, test, build on every PR | |
-| Hosting | Netlify (production from `main`, deploy previews on PRs) | |
 
 Do NOT use React Native. Capacitor keeps one codebase that runs identically in the browser and in the native shell.
+
+### Deploy notes
+
+- The site is served from `/tehachapi/`, not the domain root. `deploy.yml` passes that base path to `vite build`. Never hard-code root-absolute URLs (`/foo.png`) in TS/CSS; import assets or use `import.meta.env.BASE_URL`.
+- The Pages domain currently serves plain HTTP. A service worker (PWA) needs HTTPS, so "Enforce HTTPS" must be on for the custom domain before the PWA step.
 
 ## Architecture rule: engine and view are separate
 
 ```
 src/
-  engine/            # Pure TypeScript. No React, no DOM.
-    types.ts         # Node, Edge, Switch, Train, Route, Level, ScheduleEntry
-    trackGraph.ts    # Build graph from level JSON; edge lengths; geometry lookup
-    routing.ts       # Pathfinding from train head to target; reservation/conflicts
-    physics.ts       # Per-train speed/position update (accel, cruise, brake)
-    clock.ts         # Game clock (HH:MM), time scale, fast-forward
-    scheduler.ts     # Spawns trains from the schedule at their times; scoring
-    simulation.ts    # step(state, dtSeconds) -> new state; fixed timestep
+  engine/            # Pure TypeScript. No React, no DOM, no wall clock.
+    types.ts         # Level schema, RouteStep, Train, TrainResult, GameState
+    trackGraph.ts    # Build graph from level JSON; edge lengths; geometry and path lookups; tap snapping
+    routing.ts       # findSteps (Dijkstra), requestRoute (grant/refuse, reservations)
+    physics.ts       # advance(): one train, one timestep (accel, cruise, brake, exact stop)
+    clock.ts         # "HH:MM" <-> seconds since midnight
+    scheduler.ts     # Spawns trains from the schedule; scoring; level-complete check
+    simulation.ts    # createInitialState, step(graph, state, dtS), skipToNextArrival
   render/            # React components that only READ engine state
-    TrackLayer.tsx   # <path> per edge; color by reservation state
-    TrainLayer.tsx   # <rect> per train, positioned/rotated along its edge(s)
-    Hud.tsx          # Clock, upcoming arrivals, messages
+    view.ts          # World -> view mapping (Y_SCALE), viewBox
+    TrackLayer.tsx   # <polyline> per edge; green when reserved
+    TrainLayer.tsx   # Thick <polyline> per train body, label, stop marker
+    Hud.tsx          # Clock, speed buttons, train list, messages, level-complete panel
   input/
-    useTapRouting.ts # Tap train -> select; tap location -> request route
-  store.ts           # Zustand: holds engine state, exposes actions
-  App.tsx
+    useTapRouting.ts # Tap train -> select; tap track or terminal -> request route
+  store.ts           # Zustand: holds engine state, time scale, selection; runs the fixed-step loop
+  App.tsx            # requestAnimationFrame loop + layout
 levels/
   level-01.json      # Track layout + schedule (see format below)
-tests/               # Vitest; most tests target src/engine
+tests/               # Vitest; all tests target src/engine
 ```
 
-The game loop calls `requestAnimationFrame`, accumulates real time × time scale, and runs `simulation.step` in fixed increments (e.g. 0.1 game-seconds). The engine never reads the clock or the DOM directly, so tests can run it deterministically.
+ESLint fails the build if anything under `src/engine` imports React, Zustand, the store, `render/` or `input/`, or touches `window`, `document`, `performance`, `requestAnimationFrame` or `Date.now`.
+
+The game loop calls `requestAnimationFrame`, accumulates real time × time scale, and runs `simulation.step` in fixed increments of `FIXED_DT_S` (0.1 game-seconds). The engine never reads the clock or the DOM, so tests run it deterministically.
 
 ## Core model
 
-- **World units are meters and seconds.** The renderer maps world coordinates to the SVG `viewBox`. Physics never sees pixels.
-- **Track graph:** `nodes` (terminals, switch points) and `edges` (track segments between nodes, optional intermediate `points` for drawing curves/siding offsets). An edge's length is its polyline length unless a `lengthM` value overrides it.
-- **Switch:** a node with more than one edge on one side. Its state is set when a route is granted.
-- **Train position:** `{ edgeId, offsetM, direction }` for the head. The body extends `trainLengthM` back along the path the train came from. All trains share the same length.
-- **Route:** an ordered list of edges from the train head to a target `{ edgeId, offsetM }` (target = where the head stops).
-  - A route is granted only if no edge is reserved by another train. Reserved edges render green.
-  - Edges are released behind the train's tail once it clears them.
-- **Physics, per train each step:**
-  - `distanceRemaining` = distance along the route to the target.
+- **World units are meters and seconds.** Physics never sees pixels.
+- **Vertical exaggeration.** The renderer draws y at `Y_SCALE` (6×), like a dispatcher's panel, because at true scale a siding sits only ~8 pt from the main on an iPhone and cannot be tapped separately. This is visual only. Tap snapping (`nearestTrackPosition`) takes the same scale.
+- **Track graph:** `nodes` (terminals, switch points) and `edges` (track segments between nodes, optional intermediate `points` for drawing). An edge's length is its polyline length unless `lengthM` overrides it.
+- **Direction and offsets:** `direction` is `1` when travelling from an edge's `from` node to `to`, `-1` for the reverse. `offsetM` on an edge is always measured from `from`.
+- **Movement through nodes:** a train may continue onto any edge that leaves the node on the far side (heading within 90° of its arrival heading). That one rule makes facing switches offer both legs and stops trains doubling back through trailing switches. **Trains cannot reverse.**
+- **Train position:** a train stores `path` (the `RouteStep[]` from the edge under its tail to the end of its granted route) and `headM` (head distance along that path). The body is the `trainLengthM` behind the head. `locateOnPath` converts to `{ edgeId, offsetM, direction }` when needed. All trains share the same length.
+- **Stop target:** `stopAtM`, measured like `headM`. `null` means the train is leaving: it runs off the end of its path through a terminal.
+- **Routes** (`requestRoute`):
+  - The shortest path that avoids edges reserved by other trains wins, so a train takes a siding by itself when the main is held.
+  - On success, every edge in the train's path is reserved by it (`GameState.reservations`). Reserved edges render green.
+  - Stop targets are kept `STOP_CLEARANCE_M` (20 m) from either end of an edge, so a stopped train never fouls a switch.
+  - A target at a terminal's end of the line becomes an exit.
+  - Refusals: `no-path`, `blocked` (names the train in the way), `too-close` (cannot brake in time), `departing`.
+- **Releasing:** in `step`, an edge is dropped from `path` and its reservation released once the tail clears it.
+- **Physics, per train each step** (`advance`):
   - `brakingDistance = v² / (2 · decel)`.
-  - If `distanceRemaining <= brakingDistance + margin`, the train brakes.
+  - If `distanceRemaining <= brakingDistance + margin`, the train brakes, down to `CREEP_SPEED_MPS` (1 m/s), and creeps the last few meters.
   - Otherwise it accelerates at `accel` up to `maxSpeed`.
-  - Clamp the final approach so the train stops exactly at the target (v = 0, no overshoot).
-- **Spawning:** at `appearsAt`, a train enters at its terminal's portal, moving inward. If the entry block is occupied, it waits off-screen and the HUD warns.
-- **Scoring (v1):** on time / late by N minutes at destination; collision or overrun = level failed.
+  - The final step is clamped so the head lands exactly on the target with v = 0.
+- **Spawning:** at `appearsAt`, a train's head enters at its terminal's portal with the body still off the map. It is routed to the far end of its entry edge and stops there until the player sends it on. If the entry edge is reserved, the train stays pending and the HUD warns.
+- **Leaving and scoring:** arrival time is when the head reaches the exit terminal; the train is removed when its tail clears. A `TrainResult` records minutes late (0 = on time) and whether it left through its scheduled destination.
+- **No fail state yet.** Reservations and the exact stop make collisions and overruns impossible. Two trains routed nose to nose on single track simply deadlock, undetected.
+- **Fast-forward:** the store drops back to 1× whenever a train enters. "Skip to next train" only works while the board is empty.
 
 ## Level file format (`levels/*.json`)
 
 See `levels/level-01.json`. Key fields:
 - `startTime` — game clock at level start, `"HH:MM"`.
-- `trainLengthM`, `physics.accelMps2`, `physics.decelMps2`.
+- `trainLengthM`, `physics.accelMps2`, `physics.decelMps2`, `physics.stopMarginM`.
 - `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label? }`.
-- `edges[]`: `{ id, from, to, points?: [[x,y],...] }`.
+- `edges[]`: `{ id, from, to, points?: [[x,y],...], lengthM? }`.
 - `schedule[]`: `{ id, name, appearsAt, entry: <terminal node id>, maxSpeedMps, destination: <terminal node id>, dueAt }`.
+
+`buildGraph` throws on duplicate ids, edges that reference unknown nodes, and schedule entries whose `entry` or `destination` is not a terminal. The level is currently imported statically in `store.ts`.
 
 ## Conventions
 
 - East = +x. "Eastbound" trains enter at the west terminal.
-- Keep engine functions pure and add a Vitest test with every engine change.
+- Keep engine functions pure (state in, new state out) and add a Vitest test with every engine change.
+- `tests/simulation.test.ts` contains a scripted full playthrough of level 1. Keep it passing; extend it when level 1 changes.
 - iPhone first: landscape, touch targets ≥ 44 pt, no hover-only UI, respect safe-area insets.
-- Every PR must pass `npm run typecheck && npm run lint && npm test && npm run build`.
+- Stroke widths are in screen pixels (`vector-effect: non-scaling-stroke`); map label sizes are in view units.
 
 ## Roadmap
 
-1. Scaffold (Vite + React + TS + Vitest + ESLint), CI workflow, Netlify deploy.
-2. Engine: track graph, a single train driven along a fixed route, physics with exact stop.
-3. Render track + train in SVG; pan/zoom fit to screen.
-4. Tap-to-route with reservations (green) and switch setting.
+Done:
+1. Scaffold, CI, deploy.
+2. Engine: track graph, routing, physics with exact stop.
+3. Render track + trains in SVG, fit to screen.
+4. Tap-to-route with reservations (green).
 5. Clock, HUD, scheduler from JSON, fast-forward.
-6. Level 1 complete: two sidings, meets/passes, scoring.
-7. PWA install on iPhone. Later: Capacitor iOS/Android builds.
+6. Level 1: two sidings, meets/passes, scoring.
+
+Next:
+7. Deadlock detection and a level-failed state; end-of-level score summary.
+8. Pan/zoom for layouts larger than the screen.
+9. More levels and a level picker.
+10. PWA install on iPhone (needs HTTPS on the Pages domain).
+11. Capacitor iOS/Android builds.
