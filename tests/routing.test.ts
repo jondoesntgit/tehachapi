@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
 import { findSteps, requestRoute, STOP_CLEARANCE_M } from '../src/engine/routing'
 import { createInitialState, step } from '../src/engine/simulation'
+import { buildGraph } from '../src/engine/trackGraph'
 import type { GameState } from '../src/engine/types'
-import { graph, route, runUntil } from './helpers'
+import { level, route, runUntil } from './helpers'
+
+/** Level 1 without the local on siding A, so each test controls the whole board. */
+const graph = buildGraph({ ...level, startingTrains: [] })
 
 /** T1 has just entered at WEST; nothing else is on the board. */
 function withT1(): GameState {

@@ -67,6 +67,40 @@ export function spawnDue(graph: TrackGraph, state: GameState): GameState {
   return next
 }
 
+/**
+ * Trains already standing on the track at the start of the level, each held on its own edge with
+ * the head `STOP_CLEARANCE_M` short of the far end, waiting for the dispatcher.
+ */
+export function placeStartingTrains(graph: TrackGraph): Pick<GameState, 'trains' | 'reservations'> {
+  const { trainLengthM } = graph.level
+  const trains: Train[] = []
+  const reservations: Record<string, string> = {}
+  for (const start of graph.level.startingTrains ?? []) {
+    const edge = getEdge(graph, start.edge)
+    if (reservations[edge.id] !== undefined) {
+      throw new Error(`Starting trains "${reservations[edge.id]}" and "${start.id}" share edge "${edge.id}"`)
+    }
+    if (edge.lengthM < trainLengthM + 2 * STOP_CLEARANCE_M) {
+      throw new Error(`Starting train "${start.id}" does not fit clear of the switches on edge "${edge.id}"`)
+    }
+    const headM = edge.lengthM - STOP_CLEARANCE_M
+    trains.push({
+      id: start.id,
+      name: start.name,
+      maxSpeedMps: start.maxSpeedMps,
+      destination: start.destination,
+      dueAtS: parseClock(start.dueAt),
+      speedMps: 0,
+      path: [{ edgeId: edge.id, direction: start.direction }],
+      headM,
+      stopAtM: headM,
+      arrivedAtS: null,
+    })
+    reservations[edge.id] = start.id
+  }
+  return { trains, reservations }
+}
+
 export function scoreArrival(train: Train, arrivedAtS: number, exitedAt: string): TrainResult {
   return {
     trainId: train.id,

@@ -1,6 +1,6 @@
 import { parseClock } from './clock'
 import { advance } from './physics'
-import { nextArrivalS, scoreArrival, spawnDue } from './scheduler'
+import { nextArrivalS, placeStartingTrains, scoreArrival, spawnDue } from './scheduler'
 import { getEdge, pathLength, stepEndNode, type TrackGraph } from './trackGraph'
 import type { GameState, Train } from './types'
 
@@ -10,8 +10,7 @@ export const FIXED_DT_S = 0.1
 export function createInitialState(graph: TrackGraph): GameState {
   return {
     timeS: parseClock(graph.level.startTime),
-    trains: [],
-    reservations: {},
+    ...placeStartingTrains(graph),
     pending: graph.level.schedule.map((entry) => entry.id),
     results: [],
   }

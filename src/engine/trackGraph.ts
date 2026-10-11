@@ -60,6 +60,16 @@ export function buildGraph(level: Level): TrackGraph {
     }
   }
 
+  const trainIds = new Set(level.schedule.map((entry) => entry.id))
+  for (const train of level.startingTrains ?? []) {
+    if (trainIds.has(train.id)) throw new Error(`Duplicate train id "${train.id}"`)
+    trainIds.add(train.id)
+    if (!edges.has(train.edge)) throw new Error(`Starting train "${train.id}" references unknown edge "${train.edge}"`)
+    if (nodes.get(train.destination)?.kind !== 'terminal') {
+      throw new Error(`Starting train "${train.id}" references "${train.destination}", which is not a terminal`)
+    }
+  }
+
   return { level, nodes, edges, edgesAt }
 }
 

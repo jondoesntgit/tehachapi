@@ -21,6 +21,13 @@
     { "id": "SIDING_A", "from": "SW_A1", "to": "SW_A2", "points": [[1150, -60], [2050, -60]] },
     { "id": "SIDING_B", "from": "SW_B1", "to": "SW_B2", "points": [[3950, 60], [4850, 60]] }
   ],
+  "startingTrains": [
+    {
+      "id": "L1", "name": "Westbound Local 11",
+      "edge": "SIDING_A", "direction": -1,
+      "maxSpeedMps": 12, "destination": "WEST", "dueAt": "10:10"
+    }
+  ],
   "schedule": [
     {
       "id": "T1", "name": "Eastbound Freight 101",

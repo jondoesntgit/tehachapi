@@ -41,6 +41,20 @@ export interface ScheduleEntry {
   dueAt: string
 }
 
+/** A train already standing on the track when the level starts. */
+export interface StartingTrain {
+  id: string
+  name: string
+  /** Edge the whole train stands on, head `STOP_CLEARANCE_M` short of its far end. */
+  edge: string
+  /** Way the train faces on `edge`. */
+  direction: Direction
+  maxSpeedMps: number
+  destination: string
+  /** "HH:MM" */
+  dueAt: string
+}
+
 export interface Level {
   id: string
   title: string
@@ -51,6 +65,7 @@ export interface Level {
   nodes: LevelNode[]
   edges: LevelEdge[]
   schedule: ScheduleEntry[]
+  startingTrains?: StartingTrain[]
 }
 
 /** 1 = travelling from the edge's `from` node toward `to`; -1 = the reverse. */

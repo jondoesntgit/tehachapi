@@ -108,6 +108,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
   - Otherwise it accelerates at `accel` up to `maxSpeed`.
   - The final step is clamped so the head lands exactly on the target with v = 0.
 - **Spawning:** at `appearsAt`, a train's head enters at its terminal's portal with the body still off the map. It is routed to the far end of its entry edge and stops there until the player sends it on. If the entry edge is reserved, the train stays pending and the HUD warns.
+- **Starting trains:** a level's `startingTrains` are already on the board at the start, stopped on their edge with the head `STOP_CLEARANCE_M` short of the far end (`placeStartingTrains`). The whole train must fit on that edge clear of both switches.
 - **Leaving and scoring:** arrival time is when the head reaches the exit terminal; the train is removed when its tail clears. A `TrainResult` records minutes late (0 = on time) and whether it left through its scheduled destination.
 - **No fail state yet.** Reservations and the exact stop make collisions and overruns impossible. Two trains routed nose to nose on single track simply deadlock, undetected.
 - **Fast-forward:** the store drops back to 1× whenever a train enters. "Skip to next train" only works while the board is empty.
@@ -120,8 +121,9 @@ See `levels/level-01.json`. Key fields:
 - `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label? }`.
 - `edges[]`: `{ id, from, to, points?: [[x,y],...], lengthM? }`.
 - `schedule[]`: `{ id, name, appearsAt, entry: <terminal node id>, maxSpeedMps, destination: <terminal node id>, dueAt }`.
+- `startingTrains[]` (optional): `{ id, name, edge, direction: 1 | -1, maxSpeedMps, destination: <terminal node id>, dueAt }` — trains standing on `edge` at the start, facing `direction`.
 
-`buildGraph` throws on duplicate ids, edges that reference unknown nodes, and schedule entries whose `entry` or `destination` is not a terminal. The level is currently imported statically in `store.ts`.
+`buildGraph` throws on duplicate ids, edges that reference unknown nodes, schedule entries whose `entry` or `destination` is not a terminal, and starting trains with an unknown edge or a non-terminal destination. `createInitialState` throws if a starting train does not fit its edge or two share one. The level is currently imported statically in `store.ts`.
 
 ## Conventions
 

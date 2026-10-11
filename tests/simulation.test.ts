@@ -2,29 +2,76 @@ import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
 import { heldAtPortal, isLevelComplete } from '../src/engine/scheduler'
 import { createInitialState, skipToNextArrival, step } from '../src/engine/simulation'
-import { buildGraph, locateOnPath } from '../src/engine/trackGraph'
+import { buildGraph, getEdge, locateOnPath, type TrackGraph } from '../src/engine/trackGraph'
+import type { GameState } from '../src/engine/types'
 import { graph, level, route, runUntil } from './helpers'
 
 const EAST_EXIT = { edgeId: 'M5', offsetM: 1000 }
 const WEST_EXIT = { edgeId: 'M1', offsetM: 0 }
+
+/** Sends the local waiting on siding A out through the west terminal. */
+function clearLocal(g: TrackGraph, state: GameState): GameState {
+  const routed = route(g, state, 'L1', WEST_EXIT)
+  return runUntil(g, routed, (s) => s.results.some((r) => r.trainId === 'L1'))
+}
+
+/** Level 1 with the local cleared away, skipped to just before T1. */
+function startAtT1(g: TrackGraph = graph): GameState {
+  return skipToNextArrival(g, clearLocal(g, createInitialState(g)))
+}
 
 describe('simulation', () => {
   it('starts at the level start time with the whole schedule pending', () => {
     const state = createInitialState(graph)
     expect(state.timeS).toBe(parseClock('09:53'))
     expect(state.pending).toEqual(['T1', 'T2', 'T3'])
-    expect(state.trains).toEqual([])
+  })
+
+  it('starts with the local standing on siding A, clear of both switches, facing west', () => {
+    const state = createInitialState(graph)
+    expect(state.trains.map((t) => t.id)).toEqual(['L1'])
+    expect(state.reservations).toEqual({ SIDING_A: 'L1' })
+    const l1 = state.trains[0]
+    expect(l1.speedMps).toBe(0)
+    expect(l1.stopAtM).toBe(l1.headM)
+    expect(locateOnPath(graph, l1.path, l1.headM)).toEqual({ edgeId: 'SIDING_A', offsetM: 20, direction: -1 })
+    const tail = locateOnPath(graph, l1.path, l1.headM - level.trainLengthM)
+    expect(tail.edgeId).toBe('SIDING_A')
+    expect(tail.offsetM).toBeLessThanOrEqual(getEdge(graph, 'SIDING_A').lengthM - 20)
+
+    // It stays put until dispatched.
+    const later = runUntil(graph, state, (s) => s.timeS >= parseClock('10:00'))
+    expect(later.trains[0]).toEqual(l1)
+  })
+
+  it('sends the local home on time', () => {
+    const state = clearLocal(graph, createInitialState(graph))
+    expect(state.results).toEqual([expect.objectContaining({ trainId: 'L1', exitedAt: 'WEST', lateMinutes: 0 })])
+    expect(state.reservations).toEqual({})
+  })
+
+  it('rejects starting trains that do not fit, share an edge, or reuse an id', () => {
+    const local = level.startingTrains![0]
+    const withTrains = (startingTrains: typeof level.startingTrains) => () =>
+      createInitialState(buildGraph({ ...level, startingTrains }))
+    expect(() => createInitialState(buildGraph({ ...level, trainLengthM: 1200 }))).toThrow(/does not fit/)
+    expect(withTrains([local, { ...local, id: 'L2' }])).toThrow(/share edge/)
+    expect(withTrains([{ ...local, id: 'T1' }])).toThrow(/Duplicate train id/)
+    expect(withTrains([{ ...local, edge: 'NOPE' }])).toThrow(/unknown edge/)
+    expect(withTrains([{ ...local, destination: 'SW_A1' }])).toThrow(/not a terminal/)
   })
 
   it('skips ahead to just before the next train, but never while trains are on the board', () => {
-    const skipped = skipToNextArrival(graph, createInitialState(graph))
+    const initial = createInitialState(graph)
+    expect(skipToNextArrival(graph, initial)).toBe(initial)
+    const skipped = startAtT1()
     expect(skipped.timeS).toBe(parseClock('10:32') - 10)
     const withTrain = runUntil(graph, skipped, (s) => s.trains.length > 0)
     expect(skipToNextArrival(graph, withTrain)).toBe(withTrain)
   })
 
   it('brings a train in at its time and holds it short of the first switch', () => {
-    let state = skipToNextArrival(graph, createInitialState(graph))
+    let state = startAtT1()
     state = runUntil(graph, state, (s) => s.trains.length > 0)
     expect(state.timeS).toBeCloseTo(parseClock('10:32'), 0)
     expect(state.reservations).toEqual({ M1: 'T1' })
@@ -35,7 +82,7 @@ describe('simulation', () => {
   })
 
   it('runs a train across the line, releasing track behind it, and scores it on time', () => {
-    let state = skipToNextArrival(graph, createInitialState(graph))
+    let state = startAtT1()
     state = runUntil(graph, state, (s) => s.trains.length > 0)
     state = route(graph, state, 'T1', EAST_EXIT)
     expect(Object.keys(state.reservations).sort()).toEqual(['M1', 'M2', 'M3', 'M4', 'M5'])
@@ -48,32 +95,32 @@ describe('simulation', () => {
     expect(headOffsetM).toBeGreaterThanOrEqual(600)
     expect(headOffsetM).toBeLessThan(602)
 
-    state = runUntil(graph, state, (s) => s.results.length === 1)
+    state = runUntil(graph, state, (s) => s.results.length === 2)
     expect(state.trains.some((t) => t.id === 'T1')).toBe(false)
     expect(Object.values(state.reservations)).not.toContain('T1')
-    expect(state.results[0]).toMatchObject({
+    expect(state.results[1]).toMatchObject({
       trainId: 'T1',
       exitedAt: 'EAST',
       reachedDestination: true,
       lateMinutes: 0,
     })
-    expect(state.results[0].arrivedAtS).toBeLessThan(parseClock('10:50'))
+    expect(state.results[1].arrivedAtS).toBeLessThan(parseClock('10:50'))
   })
 
   it('scores lateness in whole minutes', () => {
     const tight = buildGraph({ ...level, schedule: [{ ...level.schedule[0], dueAt: '10:35' }] })
-    let state = skipToNextArrival(tight, createInitialState(tight))
+    let state = startAtT1(tight)
     state = runUntil(tight, state, (s) => s.trains.length > 0)
     state = route(tight, state, 'T1', EAST_EXIT)
-    state = runUntil(tight, state, (s) => s.results.length === 1)
-    const { arrivedAtS, lateMinutes } = state.results[0]
+    state = runUntil(tight, state, (s) => s.results.length === 2)
+    const { arrivedAtS, lateMinutes } = state.results[1]
     expect(lateMinutes).toBe(Math.ceil((arrivedAtS - parseClock('10:35')) / 60))
     expect(lateMinutes).toBeGreaterThan(0)
   })
 
   it('holds a train off the map while its entry block is occupied', () => {
     // T1 is left sitting on M1, which is also T3's entry block.
-    let state = skipToNextArrival(graph, createInitialState(graph))
+    let state = startAtT1()
     state = runUntil(graph, state, (s) => s.timeS >= parseClock('10:42'))
     expect(state.trains.map((t) => t.id).sort()).toEqual(['T1', 'T2'])
     expect(heldAtPortal(graph, state).map((e) => e.id)).toEqual(['T3'])
@@ -85,8 +132,8 @@ describe('simulation', () => {
     expect(heldAtPortal(graph, state)).toEqual([])
   })
 
-  it('completes level 1 with a meet at siding A and a pass at siding B', () => {
-    let state = skipToNextArrival(graph, createInitialState(graph))
+  it('completes level 1: the local goes home, then a meet at siding A and a pass at siding B', () => {
+    let state = startAtT1()
     const done = (id: string) => (s: typeof state) => s.results.some((r) => r.trainId === id)
     const stopped = (id: string) => (s: typeof state) => s.trains.find((t) => t.id === id)?.speedMps === 0
 
@@ -107,14 +154,14 @@ describe('simulation', () => {
     state = route(graph, state, 'T1', EAST_EXIT)
     state = runUntil(graph, state, isLevelComplete)
 
-    expect(state.results.map((r) => r.trainId)).toEqual(['T2', 'T3', 'T1'])
+    expect(state.results.map((r) => r.trainId)).toEqual(['L1', 'T2', 'T3', 'T1'])
     expect(state.results.every((r) => r.reachedDestination)).toBe(true)
     expect(state.reservations).toEqual({})
   })
 
   it('is deterministic', () => {
     const run = () => {
-      let state = skipToNextArrival(graph, createInitialState(graph))
+      let state = startAtT1()
       for (let i = 0; i < 3000; i++) state = step(graph, state, 0.1)
       return state
     }
