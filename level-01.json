@@ -1,0 +1,41 @@
+{
+  "id": "level-01",
+  "title": "Single Track with Two Sidings",
+  "startTime": "09:53",
+  "trainLengthM": 600,
+  "physics": { "accelMps2": 0.25, "decelMps2": 0.35, "stopMarginM": 5 },
+  "nodes": [
+    { "id": "WEST",  "x": 0,    "y": 0, "kind": "terminal", "label": "West Terminal" },
+    { "id": "SW_A1", "x": 1000, "y": 0, "kind": "switch" },
+    { "id": "SW_A2", "x": 2200, "y": 0, "kind": "switch" },
+    { "id": "SW_B1", "x": 3800, "y": 0, "kind": "switch" },
+    { "id": "SW_B2", "x": 5000, "y": 0, "kind": "switch" },
+    { "id": "EAST",  "x": 6000, "y": 0, "kind": "terminal", "label": "East Terminal" }
+  ],
+  "edges": [
+    { "id": "M1", "from": "WEST",  "to": "SW_A1" },
+    { "id": "M2", "from": "SW_A1", "to": "SW_A2" },
+    { "id": "M3", "from": "SW_A2", "to": "SW_B1" },
+    { "id": "M4", "from": "SW_B1", "to": "SW_B2" },
+    { "id": "M5", "from": "SW_B2", "to": "EAST" },
+    { "id": "SIDING_A", "from": "SW_A1", "to": "SW_A2", "points": [[1150, -60], [2050, -60]] },
+    { "id": "SIDING_B", "from": "SW_B1", "to": "SW_B2", "points": [[3950, 60], [4850, 60]] }
+  ],
+  "schedule": [
+    {
+      "id": "T1", "name": "Eastbound Freight 101",
+      "appearsAt": "10:32", "entry": "WEST",
+      "maxSpeedMps": 18, "destination": "EAST", "dueAt": "10:50"
+    },
+    {
+      "id": "T2", "name": "Westbound Freight 202",
+      "appearsAt": "10:38", "entry": "EAST",
+      "maxSpeedMps": 15, "destination": "WEST", "dueAt": "11:00"
+    },
+    {
+      "id": "T3", "name": "Eastbound Express 303",
+      "appearsAt": "10:41", "entry": "WEST",
+      "maxSpeedMps": 27, "destination": "EAST", "dueAt": "10:55"
+    }
+  ]
+}
