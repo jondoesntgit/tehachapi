@@ -62,6 +62,7 @@ body,
 
 .track-reserved {
   stroke: var(--reserved);
+  /* RESERVED_STROKE_PX in TrackLayer.tsx. */
   stroke-width: 4;
 }
 

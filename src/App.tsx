@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { useTapRouting } from './input/useTapRouting'
 import { Hud } from './render/Hud'
 import { TrackLayer } from './render/TrackLayer'
@@ -20,15 +20,35 @@ function useGameLoop() {
   }, [])
 }
 
+/** View units per CSS pixel of the map, kept current as the screen resizes or rotates. */
+function useUnitsPerPx(svgRef: RefObject<SVGSVGElement | null>): number {
+  const [unitsPerPx, setUnitsPerPx] = useState(1)
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const measure = () => {
+      const ctm = svg.getScreenCTM()
+      if (ctm && ctm.a > 0) setUnitsPerPx(1 / ctm.a)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(svg)
+    measure()
+    return () => observer.disconnect()
+  }, [svgRef])
+  return unitsPerPx
+}
+
 export function App() {
   const graph = useGameStore((s) => s.graph)
   const onTap = useTapRouting()
+  const svgRef = useRef<SVGSVGElement>(null)
+  const unitsPerPx = useUnitsPerPx(svgRef)
   useGameLoop()
 
   return (
     <main className="app">
-      <svg className="map" viewBox={viewBox(graph)} preserveAspectRatio="xMidYMid meet" onClick={onTap}>
-        <TrackLayer />
+      <svg ref={svgRef} className="map" viewBox={viewBox(graph)} preserveAspectRatio="xMidYMid meet" onClick={onTap}>
+        <TrackLayer unitsPerPx={unitsPerPx} />
         <TrainLayer />
       </svg>
       <Hud />
