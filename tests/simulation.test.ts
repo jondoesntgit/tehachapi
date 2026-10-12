@@ -15,9 +15,9 @@ function clearLocal(g: TrackGraph, state: GameState): GameState {
   return runUntil(g, routed, (s) => s.results.some((r) => r.trainId === 'L1'))
 }
 
-/** Level 1 with the local cleared away, skipped to just before T1. */
+/** The fixture layout with its local cleared away, skipped to just before T1. */
 function startAtT1(g: TrackGraph = graph): GameState {
-  return skipToNextArrival(g, clearLocal(g, createInitialState(g)))
+  return skipToNextArrival(clearLocal(g, createInitialState(g)))
 }
 
 describe('simulation', () => {
@@ -63,11 +63,11 @@ describe('simulation', () => {
 
   it('skips ahead to just before the next train, but never while trains are on the board', () => {
     const initial = createInitialState(graph)
-    expect(skipToNextArrival(graph, initial)).toBe(initial)
+    expect(skipToNextArrival(initial)).toBe(initial)
     const skipped = startAtT1()
     expect(skipped.timeS).toBe(parseClock('10:32') - 10)
     const withTrain = runUntil(graph, skipped, (s) => s.trains.length > 0)
-    expect(skipToNextArrival(graph, withTrain)).toBe(withTrain)
+    expect(skipToNextArrival(withTrain)).toBe(withTrain)
   })
 
   it('brings a train in at its time and holds it short of the first switch', () => {
@@ -132,7 +132,7 @@ describe('simulation', () => {
     expect(heldAtPortal(graph, state)).toEqual([])
   })
 
-  it('completes level 1: the local goes home, then a meet at siding A and a pass at siding B', () => {
+  it('plays the layout through: the local goes home, then a meet at siding A and a pass at siding B', () => {
     let state = startAtT1()
     const done = (id: string) => (s: typeof state) => s.results.some((r) => r.trainId === id)
     const stopped = (id: string) => (s: typeof state) => s.trains.find((t) => t.id === id)?.speedMps === 0

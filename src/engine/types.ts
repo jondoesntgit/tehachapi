@@ -65,6 +65,11 @@ export interface Level {
   nodes: LevelNode[]
   edges: LevelEdge[]
   schedule: ScheduleEntry[]
+  /**
+   * Each game moves every scheduled train's `appearsAt` by a random whole number of minutes, up to
+   * this many either way; its `dueAt` moves with it. Omitted = the timetable as written.
+   */
+  appearsJitterMin?: number
   startingTrains?: StartingTrain[]
 }
 
@@ -119,6 +124,12 @@ export interface TrainResult {
   reachedDestination: boolean
 }
 
+/** When a scheduled train enters and is due out in this game, after any random shift. */
+export interface TimetableEntry {
+  appearsAtS: number
+  dueAtS: number
+}
+
 export interface GameState {
   /** Game clock, seconds since midnight. */
   timeS: number
@@ -127,5 +138,7 @@ export interface GameState {
   reservations: Record<string, string>
   /** Schedule entry ids that have not entered yet, in schedule order. */
   pending: string[]
+  /** Schedule entry id -> this game's times. */
+  timetable: Record<string, TimetableEntry>
   results: TrainResult[]
 }

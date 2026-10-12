@@ -1,11 +1,20 @@
 import level01 from '../levels/level-01.json'
+import twoSidings from './fixtures/two-sidings.json'
 import { requestRoute } from '../src/engine/routing'
 import { FIXED_DT_S, step } from '../src/engine/simulation'
 import { buildGraph, type TrackGraph } from '../src/engine/trackGraph'
 import type { GameState, Level, TrackPosition } from '../src/engine/types'
 
-export const level = level01 as Level
+/**
+ * A fixed two-siding layout for engine unit tests, so they don't move when the real levels are
+ * retuned. It keeps its written timetable (no random shift).
+ */
+export const level = twoSidings as Level
 export const graph = buildGraph(level)
+
+/** The shipped level 1. */
+export const level1 = level01 as Level
+export const graph1 = buildGraph(level1)
 
 /** Steps until `done` holds; fails the test if it never does within `maxGameS`. */
 export function runUntil(

@@ -31,6 +31,9 @@ interface GameStore {
 
 const graph = buildGraph(level01 as Level)
 
+/** Each game gets its own seed, so trains enter at different times every play. */
+const newGame = (graph: TrackGraph) => createInitialState(graph, Math.floor(Math.random() * 2 ** 32))
+
 // Game time owed to the simulation but not yet a whole fixed step.
 let accumulatorS = 0
 
@@ -51,7 +54,7 @@ function failureMessage(reason: RouteFailure, blockedBy: string | undefined, gam
 
 export const useGameStore = create<GameStore>((set, get) => ({
   graph,
-  game: createInitialState(graph),
+  game: newGame(graph),
   selectedTrainId: null,
   timeScale: 1,
   message: null,
@@ -90,8 +93,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setTimeScale: (timeScale) => set({ timeScale }),
 
   skipAhead: () => {
-    const { graph, game } = get()
-    set({ game: skipToNextArrival(graph, game), timeScale: 1 })
+    set({ game: skipToNextArrival(get().game), timeScale: 1 })
   },
 
   clearMessage: () => set({ message: null }),
@@ -100,6 +102,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   restart: () => {
     accumulatorS = 0
-    set({ game: createInitialState(get().graph), selectedTrainId: null, timeScale: 1, message: null })
+    set({ game: newGame(get().graph), selectedTrainId: null, timeScale: 1, message: null })
   },
 }))

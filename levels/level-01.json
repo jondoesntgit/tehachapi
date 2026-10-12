@@ -1,15 +1,20 @@
 {
   "id": "level-01",
-  "title": "Single Track with Two Sidings",
+  "title": "Single Track with Four Sidings",
   "startTime": "09:53",
-  "trainLengthM": 600,
+  "trainLengthM": 400,
   "physics": { "accelMps2": 0.25, "decelMps2": 0.35, "stopMarginM": 5 },
+  "appearsJitterMin": 3,
   "nodes": [
     { "id": "WEST",  "x": 0,    "y": 0, "kind": "terminal", "label": "West Terminal" },
-    { "id": "SW_A1", "x": 1000, "y": 0, "kind": "switch" },
-    { "id": "SW_A2", "x": 2200, "y": 0, "kind": "switch" },
-    { "id": "SW_B1", "x": 3800, "y": 0, "kind": "switch" },
-    { "id": "SW_B2", "x": 5000, "y": 0, "kind": "switch" },
+    { "id": "SW_A1", "x": 700,  "y": 0, "kind": "switch" },
+    { "id": "SW_A2", "x": 1300, "y": 0, "kind": "switch" },
+    { "id": "SW_B1", "x": 2000, "y": 0, "kind": "switch" },
+    { "id": "SW_B2", "x": 2600, "y": 0, "kind": "switch" },
+    { "id": "SW_C1", "x": 3400, "y": 0, "kind": "switch" },
+    { "id": "SW_C2", "x": 4000, "y": 0, "kind": "switch" },
+    { "id": "SW_D1", "x": 4700, "y": 0, "kind": "switch" },
+    { "id": "SW_D2", "x": 5300, "y": 0, "kind": "switch" },
     { "id": "EAST",  "x": 6000, "y": 0, "kind": "terminal", "label": "East Terminal" }
   ],
   "edges": [
@@ -17,9 +22,15 @@
     { "id": "M2", "from": "SW_A1", "to": "SW_A2" },
     { "id": "M3", "from": "SW_A2", "to": "SW_B1" },
     { "id": "M4", "from": "SW_B1", "to": "SW_B2" },
-    { "id": "M5", "from": "SW_B2", "to": "EAST" },
-    { "id": "SIDING_A", "from": "SW_A1", "to": "SW_A2", "points": [[1150, -60], [2050, -60]] },
-    { "id": "SIDING_B", "from": "SW_B1", "to": "SW_B2", "points": [[3950, 60], [4850, 60]] }
+    { "id": "M5", "from": "SW_B2", "to": "SW_C1" },
+    { "id": "M6", "from": "SW_C1", "to": "SW_C2" },
+    { "id": "M7", "from": "SW_C2", "to": "SW_D1" },
+    { "id": "M8", "from": "SW_D1", "to": "SW_D2" },
+    { "id": "M9", "from": "SW_D2", "to": "EAST" },
+    { "id": "SIDING_A", "from": "SW_A1", "to": "SW_A2", "points": [[800, -60], [1200, -60]] },
+    { "id": "SIDING_B", "from": "SW_B1", "to": "SW_B2", "points": [[2100, 60], [2500, 60]] },
+    { "id": "SIDING_C", "from": "SW_C1", "to": "SW_C2", "points": [[3500, -60], [3900, -60]] },
+    { "id": "SIDING_D", "from": "SW_D1", "to": "SW_D2", "points": [[4800, 60], [5200, 60]] }
   ],
   "startingTrains": [
     {
@@ -43,6 +54,21 @@
       "id": "T3", "name": "Eastbound Express 303",
       "appearsAt": "10:41", "entry": "WEST",
       "maxSpeedMps": 27, "destination": "EAST", "dueAt": "10:55"
+    },
+    {
+      "id": "T4", "name": "Westbound Express 404",
+      "appearsAt": "10:47", "entry": "EAST",
+      "maxSpeedMps": 27, "destination": "WEST", "dueAt": "11:05"
+    },
+    {
+      "id": "T5", "name": "Eastbound Local 505",
+      "appearsAt": "10:52", "entry": "WEST",
+      "maxSpeedMps": 12, "destination": "EAST", "dueAt": "11:15"
+    },
+    {
+      "id": "T6", "name": "Westbound Freight 606",
+      "appearsAt": "10:58", "entry": "EAST",
+      "maxSpeedMps": 15, "destination": "WEST", "dueAt": "11:20"
     }
   ]
 }

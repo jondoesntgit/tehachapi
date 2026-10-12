@@ -6,7 +6,7 @@ import { buildGraph } from '../src/engine/trackGraph'
 import type { GameState } from '../src/engine/types'
 import { level, route, runUntil } from './helpers'
 
-/** Level 1 without the local on siding A, so each test controls the whole board. */
+/** The fixture layout without its local on siding A, so each test controls the whole board. */
 const graph = buildGraph({ ...level, startingTrains: [] })
 
 /** T1 has just entered at WEST; nothing else is on the board. */

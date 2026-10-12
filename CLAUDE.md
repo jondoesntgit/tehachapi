@@ -66,8 +66,9 @@ src/
     routing.ts       # findSteps (Dijkstra), requestRoute (grant/refuse, reservations)
     physics.ts       # advance(): one train, one timestep (accel, cruise, brake, exact stop)
     clock.ts         # "HH:MM" <-> seconds since midnight
-    scheduler.ts     # Spawns trains from the schedule; scoring; level-complete check
-    simulation.ts    # createInitialState, step(graph, state, dtS), skipToNextArrival
+    random.ts        # seededRandom(seed): deterministic PRNG
+    scheduler.ts     # Timetable (random shifts), spawning, starting trains, scoring, level-complete check
+    simulation.ts    # createInitialState(graph, seed?), step(graph, state, dtS), skipToNextArrival
   render/            # React components that only READ engine state
     view.ts          # World -> view mapping (Y_SCALE), viewBox
     TrackLayer.tsx   # <polyline> per edge; green when reserved
@@ -80,6 +81,8 @@ src/
 levels/
   level-01.json      # Track layout + schedule (see format below)
 tests/               # Vitest; all tests target src/engine
+  fixtures/two-sidings.json  # Frozen layout for engine unit tests (helpers.ts `graph`)
+  level-01.test.ts   # Shipped level 1 (helpers.ts `graph1`): layout, timetable, scripted playthrough
 ```
 
 ESLint fails the build if anything under `src/engine` imports React, Zustand, the store, `render/` or `input/`, or touches `window`, `document`, `performance`, `requestAnimationFrame` or `Date.now`.
@@ -107,7 +110,8 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
   - If `distanceRemaining <= brakingDistance + margin`, the train brakes, down to `CREEP_SPEED_MPS` (1 m/s), and creeps the last few meters.
   - Otherwise it accelerates at `accel` up to `maxSpeed`.
   - The final step is clamped so the head lands exactly on the target with v = 0.
-- **Spawning:** at `appearsAt`, a train's head enters at its terminal's portal with the body still off the map. It is routed to the far end of its entry edge and stops there until the player sends it on. If the entry edge is reserved, the train stays pending and the HUD warns.
+- **Timetable:** `createInitialState(graph, seed)` builds `GameState.timetable` (`buildTimetable`): each scheduled train's appearance moves by a random whole number of minutes, up to the level's `appearsJitterMin` either way, and its due time moves with it. The store passes a fresh random seed each game; with no seed (tests) the timetable is as written. The engine only ever reads times from `state.timetable`.
+- **Spawning:** at its timetabled appearance, a train's head enters at its terminal's portal with the body still off the map. It is routed to the far end of its entry edge and stops there until the player sends it on. If the entry edge is reserved, the train stays pending and the HUD warns.
 - **Starting trains:** a level's `startingTrains` are already on the board at the start, stopped on their edge with the head `STOP_CLEARANCE_M` short of the far end (`placeStartingTrains`). The whole train must fit on that edge clear of both switches.
 - **Leaving and scoring:** arrival time is when the head reaches the exit terminal; the train is removed when its tail clears. A `TrainResult` records minutes late (0 = on time) and whether it left through its scheduled destination.
 - **No fail state yet.** Reservations and the exact stop make collisions and overruns impossible. Two trains routed nose to nose on single track simply deadlock, undetected.
@@ -117,6 +121,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 
 See `levels/level-01.json`. Key fields:
 - `startTime` — game clock at level start, `"HH:MM"`.
+- `appearsJitterMin` (optional) — max random shift, in minutes either way, applied to each scheduled train per game.
 - `trainLengthM`, `physics.accelMps2`, `physics.decelMps2`, `physics.stopMarginM`.
 - `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label? }`.
 - `edges[]`: `{ id, from, to, points?: [[x,y],...], lengthM? }`.
@@ -129,7 +134,8 @@ See `levels/level-01.json`. Key fields:
 
 - East = +x. "Eastbound" trains enter at the west terminal.
 - Keep engine functions pure (state in, new state out) and add a Vitest test with every engine change.
-- `tests/simulation.test.ts` contains a scripted full playthrough of level 1. Keep it passing; extend it when level 1 changes.
+- `tests/level-01.test.ts` contains a scripted full playthrough of level 1 on its written timetable. Keep it passing; update it when level 1 changes.
+- Engine unit tests use the frozen fixture layout, so retuning a real level doesn't break them.
 - iPhone first: landscape, touch targets ≥ 44 pt, no hover-only UI, respect safe-area insets.
 - Stroke widths are in screen pixels (`vector-effect: non-scaling-stroke`); map label sizes are in view units.
 
@@ -141,7 +147,7 @@ Done:
 3. Render track + trains in SVG, fit to screen.
 4. Tap-to-route with reservations (green).
 5. Clock, HUD, scheduler from JSON, fast-forward.
-6. Level 1: two sidings, meets/passes, scoring.
+6. Level 1: four sidings, seven trains, meets/passes, scoring, randomized entry times.
 
 Next:
 7. Deadlock detection and a level-failed state; end-of-level score summary.

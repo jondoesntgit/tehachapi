@@ -2,7 +2,8 @@ import { parseClock } from './clock'
 import { safeSpeed } from './physics'
 import { STOP_CLEARANCE_M } from './routing'
 import { getEdge, type TrackGraph } from './trackGraph'
-import type { GameState, RouteStep, ScheduleEntry, Train, TrainResult } from './types'
+import { seededRandom } from './random'
+import type { GameState, RouteStep, ScheduleEntry, TimetableEntry, Train, TrainResult } from './types'
 
 export function getScheduleEntry(graph: TrackGraph, id: string): ScheduleEntry {
   const entry = graph.level.schedule.find((e) => e.id === id)
@@ -17,17 +18,36 @@ export function entryStep(graph: TrackGraph, terminalId: string): RouteStep {
   return { edgeId, direction: getEdge(graph, edgeId).from === terminalId ? 1 : -1 }
 }
 
+/**
+ * This game's times for every scheduled train. With a seed, each `appearsAt` moves by up to
+ * `appearsJitterMin` whole minutes either way (never before the level starts) and `dueAt` moves
+ * with it, so each journey keeps its time allowance. Without a seed, the timetable is as written.
+ */
+export function buildTimetable(graph: TrackGraph, seed?: number): Record<string, TimetableEntry> {
+  const { schedule, appearsJitterMin = 0, startTime } = graph.level
+  const random = seed === undefined ? () => 0.5 : seededRandom(seed)
+  const startS = parseClock(startTime)
+  const timetable: Record<string, TimetableEntry> = {}
+  for (const entry of schedule) {
+    const nominalS = parseClock(entry.appearsAt)
+    const shiftMin = Math.round((random() * 2 - 1) * appearsJitterMin)
+    const appearsAtS = Math.max(nominalS + shiftMin * 60, Math.min(nominalS, startS + 60))
+    timetable[entry.id] = { appearsAtS, dueAtS: parseClock(entry.dueAt) + appearsAtS - nominalS }
+  }
+  return timetable
+}
+
 /** Schedule entries whose time has come but whose entry block is still occupied. */
 export function heldAtPortal(graph: TrackGraph, state: GameState): ScheduleEntry[] {
   return state.pending
     .map((id) => getScheduleEntry(graph, id))
-    .filter((entry) => parseClock(entry.appearsAt) <= state.timeS)
+    .filter((entry) => state.timetable[entry.id].appearsAtS <= state.timeS)
 }
 
-/** Earliest `appearsAt` among entries that are not due yet. */
-export function nextArrivalS(graph: TrackGraph, state: GameState): number | null {
+/** Earliest appearance among entries that are not due yet. */
+export function nextArrivalS(state: GameState): number | null {
   const times = state.pending
-    .map((id) => parseClock(getScheduleEntry(graph, id).appearsAt))
+    .map((id) => state.timetable[id].appearsAtS)
     .filter((t) => t > state.timeS)
   return times.length > 0 ? Math.min(...times) : null
 }
@@ -50,7 +70,7 @@ export function spawnDue(graph: TrackGraph, state: GameState): GameState {
       name: entry.name,
       maxSpeedMps: entry.maxSpeedMps,
       destination: entry.destination,
-      dueAtS: parseClock(entry.dueAt),
+      dueAtS: next.timetable[entry.id].dueAtS,
       speedMps: Math.min(entry.maxSpeedMps, safeSpeed(stopAtM, decelMps2, stopMarginM)),
       path: [step],
       headM: 0,

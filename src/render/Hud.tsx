@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { formatClock, parseClock } from '../engine/clock'
+import { formatClock } from '../engine/clock'
 import { getScheduleEntry, heldAtPortal, isLevelComplete, nextArrivalS } from '../engine/scheduler'
 import { TIME_SCALES, useGameStore } from '../store'
 import { Help } from './Help'
@@ -25,8 +25,8 @@ export function Hud() {
   const held = heldAtPortal(graph, game)
   const upcoming = game.pending
     .map((id) => getScheduleEntry(graph, id))
-    .filter((entry) => parseClock(entry.appearsAt) > game.timeS)
-  const canSkip = game.trains.length === 0 && nextArrivalS(graph, game) !== null
+    .filter((entry) => game.timetable[entry.id].appearsAtS > game.timeS)
+  const canSkip = game.trains.length === 0 && nextArrivalS(game) !== null
   const complete = isLevelComplete(game)
   const selected = game.trains.find((t) => t.id === selectedTrainId)
 
@@ -86,7 +86,8 @@ export function Hud() {
         ))}
         {upcoming.map((entry) => (
           <span key={entry.id} className="chip upcoming">
-            <b>{entry.appearsAt}</b> {entry.name} · {label(entry.entry)} → {label(entry.destination)} by {entry.dueAt}
+            <b>{formatClock(game.timetable[entry.id].appearsAtS)}</b> {entry.name} · {label(entry.entry)} →{' '}
+            {label(entry.destination)} by {formatClock(game.timetable[entry.id].dueAtS)}
           </span>
         ))}
       </footer>

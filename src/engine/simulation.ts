@@ -1,17 +1,19 @@
 import { parseClock } from './clock'
 import { advance } from './physics'
-import { nextArrivalS, placeStartingTrains, scoreArrival, spawnDue } from './scheduler'
+import { buildTimetable, nextArrivalS, placeStartingTrains, scoreArrival, spawnDue } from './scheduler'
 import { getEdge, pathLength, stepEndNode, type TrackGraph } from './trackGraph'
 import type { GameState, Train } from './types'
 
 /** Timestep the game loop feeds to `step`, in game seconds. */
 export const FIXED_DT_S = 0.1
 
-export function createInitialState(graph: TrackGraph): GameState {
+/** A fresh game. `seed` randomizes when scheduled trains enter (see `buildTimetable`). */
+export function createInitialState(graph: TrackGraph, seed?: number): GameState {
   return {
     timeS: parseClock(graph.level.startTime),
     ...placeStartingTrains(graph),
     pending: graph.level.schedule.map((entry) => entry.id),
+    timetable: buildTimetable(graph, seed),
     results: [],
   }
 }
@@ -64,15 +66,15 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
     trains.push({ ...train, speedMps: moved.speedMps, path, headM, stopAtM, arrivedAtS })
   }
 
-  return spawnDue(graph, { timeS, trains, reservations, pending: state.pending, results })
+  return spawnDue(graph, { ...state, timeS, trains, reservations, results })
 }
 
 /**
  * Jumps the clock to shortly before the next scheduled train. Only allowed while the board is
  * empty, so nothing that should have moved is skipped; otherwise the state is returned unchanged.
  */
-export function skipToNextArrival(graph: TrackGraph, state: GameState, leadS = 10): GameState {
-  const nextS = nextArrivalS(graph, state)
+export function skipToNextArrival(state: GameState, leadS = 10): GameState {
+  const nextS = nextArrivalS(state)
   if (state.trains.length > 0 || nextS === null) return state
   return { ...state, timeS: Math.max(state.timeS, nextS - leadS) }
 }
