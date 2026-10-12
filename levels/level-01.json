@@ -37,6 +37,16 @@
       "id": "L1", "name": "Westbound Local 11",
       "edge": "SIDING_A", "direction": -1,
       "maxSpeedMps": 12, "destination": "WEST", "dueAt": "10:10"
+    },
+    {
+      "id": "L2", "name": "Eastbound Local 12",
+      "edge": "SIDING_D", "edgeChoices": ["SIDING_B", "SIDING_C", "SIDING_D"], "direction": 1,
+      "maxSpeedMps": 12, "destination": "EAST", "dueAt": "10:12"
+    },
+    {
+      "id": "L3", "name": "Westbound Local 13",
+      "edge": "SIDING_B", "edgeChoices": ["SIDING_B", "SIDING_C", "SIDING_D"], "direction": -1,
+      "maxSpeedMps": 12, "destination": "WEST", "dueAt": "10:18"
     }
   ],
   "schedule": [
@@ -69,6 +79,21 @@
       "id": "T6", "name": "Westbound Freight 606",
       "appearsAt": "10:58", "entry": "EAST",
       "maxSpeedMps": 15, "destination": "WEST", "dueAt": "11:20"
+    },
+    {
+      "id": "T7", "name": "Westbound Express 707",
+      "appearsAt": "11:08", "appearsBetween": ["10:30", "11:30"], "entry": "EAST",
+      "maxSpeedMps": 27, "destination": "WEST", "dueAt": "11:24"
+    },
+    {
+      "id": "T8", "name": "Eastbound Freight 808",
+      "appearsAt": "11:12", "appearsBetween": ["10:30", "11:30"], "entry": "WEST",
+      "maxSpeedMps": 15, "destination": "EAST", "dueAt": "11:35"
+    },
+    {
+      "id": "T9", "name": "Westbound Local 909",
+      "appearsAt": "11:20", "appearsBetween": ["10:30", "11:30"], "entry": "EAST",
+      "maxSpeedMps": 12, "destination": "WEST", "dueAt": "11:45"
     }
   ]
 }

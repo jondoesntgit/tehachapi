@@ -7,11 +7,14 @@ import type { GameState, Train } from './types'
 /** Timestep the game loop feeds to `step`, in game seconds. */
 export const FIXED_DT_S = 0.1
 
-/** A fresh game. `seed` randomizes when scheduled trains enter (see `buildTimetable`). */
+/**
+ * A fresh game. `seed` randomizes when scheduled trains enter (`buildTimetable`) and where starting
+ * trains stand (`placeStartingTrains`).
+ */
 export function createInitialState(graph: TrackGraph, seed?: number): GameState {
   return {
     timeS: parseClock(graph.level.startTime),
-    ...placeStartingTrains(graph),
+    ...placeStartingTrains(graph, seed),
     pending: graph.level.schedule.map((entry) => entry.id),
     timetable: buildTimetable(graph, seed),
     results: [],

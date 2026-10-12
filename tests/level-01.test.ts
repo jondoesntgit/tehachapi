@@ -26,7 +26,8 @@ describe('level 1', () => {
       expect(lengthM).toBeGreaterThanOrEqual(level.trainLengthM + 40)
       expect(lengthM).toBeLessThan(700)
     }
-    expect(level.schedule).toHaveLength(6)
+    expect(level.schedule).toHaveLength(9)
+    expect(level.startingTrains).toHaveLength(3)
   })
 
   it('keeps the written timetable without a seed', () => {
@@ -36,9 +37,10 @@ describe('level 1', () => {
     }
   })
 
-  it('enters T1–T3 at random whole minutes from 10:00 to 10:25 and the rest within the jitter', () => {
+  it('enters T1–T3 from 10:00 to 10:25, T7–T9 from 10:30 to 11:30, and the rest within the jitter', () => {
     const jitterS = level.appearsJitterMin! * 60
     const seen = new Set<number>()
+    const seenLate = new Set<number>()
     for (let seed = 0; seed < 200; seed++) {
       const timetable = buildTimetable(graph, seed)
       for (const entry of level.schedule) {
@@ -50,6 +52,11 @@ describe('level 1', () => {
           expect(appearsAtS).toBeGreaterThanOrEqual(parseClock('10:00'))
           expect(appearsAtS).toBeLessThanOrEqual(parseClock('10:25'))
           seen.add(appearsAtS)
+        } else if (['T7', 'T8', 'T9'].includes(entry.id)) {
+          expect(entry.appearsBetween).toEqual(['10:30', '11:30'])
+          expect(appearsAtS).toBeGreaterThanOrEqual(parseClock('10:30'))
+          expect(appearsAtS).toBeLessThanOrEqual(parseClock('11:30'))
+          seenLate.add(appearsAtS)
         } else {
           expect(Math.abs(appearsAtS - parseClock(entry.appearsAt))).toBeLessThanOrEqual(jitterS)
         }
@@ -57,6 +64,34 @@ describe('level 1', () => {
     }
     // Every minute of the window, both ends included, comes up.
     expect(seen.size).toBe(26)
+    expect(seenLate.size).toBeGreaterThan(50)
+  })
+
+  it('puts L1 on siding A and L2, L3 on different random sidings among B, C and D', () => {
+    const edgeOf = (s: GameState, id: string) => s.trains.find((t) => t.id === id)!.path[0].edgeId
+    const written = createInitialState(graph)
+    expect(['L1', 'L2', 'L3'].map((id) => edgeOf(written, id))).toEqual(['SIDING_A', 'SIDING_D', 'SIDING_B'])
+
+    const placements = new Set<string>()
+    for (let seed = 0; seed < 100; seed++) {
+      const state = createInitialState(graph, seed)
+      const [l1, l2, l3] = ['L1', 'L2', 'L3'].map((id) => edgeOf(state, id))
+      expect(l1).toBe('SIDING_A')
+      expect(['SIDING_B', 'SIDING_C', 'SIDING_D']).toContain(l2)
+      expect(['SIDING_B', 'SIDING_C', 'SIDING_D']).toContain(l3)
+      expect(l2).not.toBe(l3)
+      expect(Object.keys(state.reservations).sort()).toEqual([l1, l2, l3].sort())
+      placements.add(`${l2}/${l3}`)
+    }
+    // All six ways to seat two trains on three sidings come up.
+    expect(placements.size).toBe(6)
+  })
+
+  it('rejects edgeChoices that do not contain the written edge or name unknown edges', () => {
+    const withL2 = (change: object) =>
+      buildGraph({ ...level, startingTrains: level.startingTrains!.map((t) => (t.id === 'L2' ? { ...t, ...change } : t)) })
+    expect(() => withL2({ edgeChoices: ['SIDING_B'] })).toThrow(/do not contain/)
+    expect(() => withL2({ edgeChoices: ['SIDING_D', 'NOPE'] })).toThrow(/unknown edge/)
   })
 
   it('rejects an appearsBetween window that does not contain appearsAt', () => {
@@ -82,8 +117,10 @@ describe('level 1', () => {
   it('plays the written timetable through on time with meets in sidings C and D', () => {
     let state = createInitialState(graph)
 
-    // The local leaves siding A for home; the board is then empty until T1.
+    // The locals head home: L1 from siding A and L3 from siding B go west, L2 from siding D east.
     state = route(graph, state, 'L1', WEST_EXIT)
+    state = route(graph, state, 'L2', EAST_EXIT)
+    state = routeWhenClear(state, 'L3', WEST_EXIT)
     state = runUntil(graph, state, has('T1'))
     state = routeWhenClear(state, 'T1', EAST_EXIT)
 
@@ -102,9 +139,19 @@ describe('level 1', () => {
     state = runUntil(graph, state, has('T6'))
     state = routeWhenClear(state, 'T6', WEST_EXIT)
     state = routeWhenClear(state, 'T5', EAST_EXIT)
+
+    // Express T7 runs west, then freight T8 east; local T9 waits off the map until T8 is out.
+    state = runUntil(graph, state, has('T7'))
+    state = routeWhenClear(state, 'T7', WEST_EXIT)
+    state = runUntil(graph, state, has('T8'))
+    state = routeWhenClear(state, 'T8', EAST_EXIT)
+    state = runUntil(graph, state, has('T9'))
+    state = routeWhenClear(state, 'T9', WEST_EXIT)
     state = runUntil(graph, state, isLevelComplete)
 
-    expect(state.results.map((r) => r.trainId).sort()).toEqual(['L1', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6'])
+    expect(state.results.map((r) => r.trainId).sort()).toEqual([
+      'L1', 'L2', 'L3', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
+    ])
     expect(state.results.every((r) => r.reachedDestination)).toBe(true)
     expect(state.results.filter((r) => r.lateMinutes > 0)).toEqual([])
     expect(state.reservations).toEqual({})

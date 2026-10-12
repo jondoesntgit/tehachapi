@@ -75,6 +75,12 @@ export function buildGraph(level: Level): TrackGraph {
     if (trainIds.has(train.id)) throw new Error(`Duplicate train id "${train.id}"`)
     trainIds.add(train.id)
     if (!edges.has(train.edge)) throw new Error(`Starting train "${train.id}" references unknown edge "${train.edge}"`)
+    for (const id of train.edgeChoices ?? []) {
+      if (!edges.has(id)) throw new Error(`Starting train "${train.id}" references unknown edge "${id}"`)
+    }
+    if (train.edgeChoices && !train.edgeChoices.includes(train.edge)) {
+      throw new Error(`Starting train "${train.id}" has edgeChoices that do not contain its edge`)
+    }
     if (nodes.get(train.destination)?.kind !== 'terminal') {
       throw new Error(`Starting train "${train.id}" references "${train.destination}", which is not a terminal`)
     }

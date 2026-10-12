@@ -98,14 +98,23 @@ export function spawnDue(graph: TrackGraph, state: GameState): GameState {
 
 /**
  * Trains already standing on the track at the start of the level, each held on its own edge with
- * the head `STOP_CLEARANCE_M` short of the far end, waiting for the dispatcher.
+ * the head `STOP_CLEARANCE_M` short of the far end, waiting for the dispatcher. With a seed, a train
+ * with `edgeChoices` stands on a random one of them not already taken; without, on its `edge`.
  */
-export function placeStartingTrains(graph: TrackGraph): Pick<GameState, 'trains' | 'reservations'> {
+export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<GameState, 'trains' | 'reservations'> {
   const { trainLengthM } = graph.level
+  // Its own stream, so placing trains doesn't change which times the timetable draws.
+  const random = seed === undefined ? null : seededRandom(seed ^ 0x5eed)
   const trains: Train[] = []
   const reservations: Record<string, string> = {}
   for (const start of graph.level.startingTrains ?? []) {
-    const edge = getEdge(graph, start.edge)
+    let edgeId = start.edge
+    if (random && start.edgeChoices) {
+      const free = start.edgeChoices.filter((id) => reservations[id] === undefined)
+      if (free.length === 0) throw new Error(`Starting train "${start.id}" has no free edge to stand on`)
+      edgeId = free[Math.floor(random() * free.length)]
+    }
+    const edge = getEdge(graph, edgeId)
     if (reservations[edge.id] !== undefined) {
       throw new Error(`Starting trains "${reservations[edge.id]}" and "${start.id}" share edge "${edge.id}"`)
     }

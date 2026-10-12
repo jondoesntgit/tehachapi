@@ -52,6 +52,11 @@ export interface StartingTrain {
   name: string
   /** Edge the whole train stands on, head `STOP_CLEARANCE_M` short of its far end. */
   edge: string
+  /**
+   * Each game, the train stands on a random one of these edges that no earlier starting train has
+   * taken, instead of `edge`. Must contain `edge`.
+   */
+  edgeChoices?: string[]
   /** Way the train faces on `edge`. */
   direction: Direction
   maxSpeedMps: number
