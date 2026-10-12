@@ -19,9 +19,10 @@ export function entryStep(graph: TrackGraph, terminalId: string): RouteStep {
 }
 
 /**
- * This game's times for every scheduled train. With a seed, each `appearsAt` moves by up to
- * `appearsJitterMin` whole minutes either way (never before the level starts) and `dueAt` moves
- * with it, so each journey keeps its time allowance. Without a seed, the timetable is as written.
+ * This game's times for every scheduled train. With a seed, a train with `appearsBetween` appears
+ * at a random whole minute in that window; any other moves by up to `appearsJitterMin` whole
+ * minutes either way (never before the level starts). `dueAt` moves with the appearance, so each
+ * journey keeps its time allowance. Without a seed, the timetable is as written.
  */
 export function buildTimetable(graph: TrackGraph, seed?: number): Record<string, TimetableEntry> {
   const { schedule, appearsJitterMin = 0, startTime } = graph.level
@@ -30,8 +31,16 @@ export function buildTimetable(graph: TrackGraph, seed?: number): Record<string,
   const timetable: Record<string, TimetableEntry> = {}
   for (const entry of schedule) {
     const nominalS = parseClock(entry.appearsAt)
-    const shiftMin = Math.round((random() * 2 - 1) * appearsJitterMin)
-    const appearsAtS = Math.max(nominalS + shiftMin * 60, Math.min(nominalS, startS + 60))
+    let appearsAtS: number
+    if (seed === undefined) {
+      appearsAtS = nominalS
+    } else if (entry.appearsBetween) {
+      const [fromS, toS] = entry.appearsBetween.map(parseClock)
+      appearsAtS = fromS + Math.floor(random() * ((toS - fromS) / 60 + 1)) * 60
+    } else {
+      const shiftMin = Math.round((random() * 2 - 1) * appearsJitterMin)
+      appearsAtS = Math.max(nominalS + shiftMin * 60, Math.min(nominalS, startS + 60))
+    }
     timetable[entry.id] = { appearsAtS, dueAtS: parseClock(entry.dueAt) + appearsAtS - nominalS }
   }
   return timetable

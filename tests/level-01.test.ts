@@ -3,7 +3,7 @@ import { parseClock } from '../src/engine/clock'
 import { requestRoute } from '../src/engine/routing'
 import { buildTimetable, isLevelComplete } from '../src/engine/scheduler'
 import { createInitialState } from '../src/engine/simulation'
-import { getEdge } from '../src/engine/trackGraph'
+import { buildGraph, getEdge } from '../src/engine/trackGraph'
 import type { GameState, TrackPosition } from '../src/engine/types'
 import { graph1 as graph, level1 as level, route, runUntil } from './helpers'
 
@@ -36,19 +36,32 @@ describe('level 1', () => {
     }
   })
 
-  it('shifts each train by whole minutes within the jitter, keeping its time allowance', () => {
+  it('enters T1–T3 at random whole minutes from 10:00 to 10:25 and the rest within the jitter', () => {
     const jitterS = level.appearsJitterMin! * 60
-    for (let seed = 0; seed < 50; seed++) {
+    const seen = new Set<number>()
+    for (let seed = 0; seed < 200; seed++) {
       const timetable = buildTimetable(graph, seed)
       for (const entry of level.schedule) {
         const { appearsAtS, dueAtS } = timetable[entry.id]
-        const shiftS = appearsAtS - parseClock(entry.appearsAt)
-        expect(Math.abs(shiftS)).toBeLessThanOrEqual(jitterS)
-        expect(Math.abs(shiftS) % 60).toBe(0)
+        expect(Math.abs(appearsAtS) % 60).toBe(0)
         expect(dueAtS - appearsAtS).toBe(parseClock(entry.dueAt) - parseClock(entry.appearsAt))
-        expect(appearsAtS).toBeGreaterThan(parseClock(level.startTime))
+        if (['T1', 'T2', 'T3'].includes(entry.id)) {
+          expect(entry.appearsBetween).toEqual(['10:00', '10:25'])
+          expect(appearsAtS).toBeGreaterThanOrEqual(parseClock('10:00'))
+          expect(appearsAtS).toBeLessThanOrEqual(parseClock('10:25'))
+          seen.add(appearsAtS)
+        } else {
+          expect(Math.abs(appearsAtS - parseClock(entry.appearsAt))).toBeLessThanOrEqual(jitterS)
+        }
       }
     }
+    // Every minute of the window, both ends included, comes up.
+    expect(seen.size).toBe(26)
+  })
+
+  it('rejects an appearsBetween window that does not contain appearsAt', () => {
+    const schedule = level.schedule.map((e) => (e.id === 'T1' ? { ...e, appearsAt: '10:30' } : e))
+    expect(() => buildGraph({ ...level, schedule })).toThrow(/appearsBetween/)
   })
 
   it('replays the same times for the same seed and varies them across seeds', () => {
@@ -66,7 +79,7 @@ describe('level 1', () => {
     expect(after.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(state.timetable.T1.dueAtS)
   })
 
-  it('plays through on time with meets in sidings C and D', () => {
+  it('plays the written timetable through on time with meets in sidings C and D', () => {
     let state = createInitialState(graph)
 
     // The local leaves siding A for home; the board is then empty until T1.

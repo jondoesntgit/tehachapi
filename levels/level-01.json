@@ -42,18 +42,18 @@
   "schedule": [
     {
       "id": "T1", "name": "Eastbound Freight 101",
-      "appearsAt": "10:32", "entry": "WEST",
-      "maxSpeedMps": 18, "destination": "EAST", "dueAt": "10:50"
+      "appearsAt": "10:05", "appearsBetween": ["10:00", "10:25"], "entry": "WEST",
+      "maxSpeedMps": 18, "destination": "EAST", "dueAt": "10:23"
     },
     {
       "id": "T2", "name": "Westbound Freight 202",
-      "appearsAt": "10:38", "entry": "EAST",
-      "maxSpeedMps": 15, "destination": "WEST", "dueAt": "11:00"
+      "appearsAt": "10:11", "appearsBetween": ["10:00", "10:25"], "entry": "EAST",
+      "maxSpeedMps": 15, "destination": "WEST", "dueAt": "10:33"
     },
     {
       "id": "T3", "name": "Eastbound Express 303",
-      "appearsAt": "10:41", "entry": "WEST",
-      "maxSpeedMps": 27, "destination": "EAST", "dueAt": "10:55"
+      "appearsAt": "10:14", "appearsBetween": ["10:00", "10:25"], "entry": "WEST",
+      "maxSpeedMps": 27, "destination": "EAST", "dueAt": "10:28"
     },
     {
       "id": "T4", "name": "Westbound Express 404",

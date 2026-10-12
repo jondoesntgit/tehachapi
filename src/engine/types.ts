@@ -34,6 +34,11 @@ export interface ScheduleEntry {
   name: string
   /** "HH:MM" */
   appearsAt: string
+  /**
+   * `["HH:MM", "HH:MM"]`: each game, the train appears at a random whole minute in this window
+   * (inclusive) instead of being shifted by `appearsJitterMin`. Must contain `appearsAt`.
+   */
+  appearsBetween?: [string, string]
   entry: string
   maxSpeedMps: number
   destination: string

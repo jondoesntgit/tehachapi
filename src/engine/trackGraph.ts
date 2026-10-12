@@ -1,3 +1,4 @@
+import { parseClock } from './clock'
 import type { Direction, HeadPosition, Level, LevelNode, RouteStep, TrackPosition, Vec2 } from './types'
 
 export interface GraphEdge {
@@ -57,6 +58,15 @@ export function buildGraph(level: Level): TrackGraph {
       if (nodes.get(id)?.kind !== 'terminal') {
         throw new Error(`Schedule entry "${entry.id}" references "${id}", which is not a terminal`)
       }
+    }
+  }
+
+  for (const entry of level.schedule) {
+    if (!entry.appearsBetween) continue
+    const [fromS, toS] = entry.appearsBetween.map(parseClock)
+    const nominalS = parseClock(entry.appearsAt)
+    if (!(fromS <= nominalS && nominalS <= toS)) {
+      throw new Error(`Schedule entry "${entry.id}" has an appearsBetween window that does not contain appearsAt`)
     }
   }
 
