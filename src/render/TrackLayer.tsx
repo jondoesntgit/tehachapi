@@ -2,7 +2,7 @@ import { pathLength, pathPolyline } from '../engine/trackGraph'
 import { useGameStore } from '../store'
 import { LABEL_SIZE, pointsAttr, PX_PER_MM, toView, trimEnd, viewPointsAttr } from './view'
 
-/** Clear screen space left at the front of each train's green route, so two routes never touch. */
+/** Clear screen space between the ends of two trains' green routes, so they never touch. */
 const ROUTE_GAP_MM = 1
 /** Matches `.track-reserved` stroke-width. Each round cap pokes out half of it past its end point. */
 const RESERVED_STROKE_PX = 4
@@ -10,8 +10,8 @@ const RESERVED_STROKE_PX = 4
 export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
   const graph = useGameStore((s) => s.graph)
   const trains = useGameStore((s) => s.game.trains)
-  // The trimmed front cap and a neighbouring route's cap both reach into the gap.
-  const trimV = (ROUTE_GAP_MM * PX_PER_MM + RESERVED_STROKE_PX) * unitsPerPx
+  // Each end gives up half the gap. Both routes' round caps reach back into it, so add one cap each.
+  const trimV = ((ROUTE_GAP_MM * PX_PER_MM) / 2 + RESERVED_STROKE_PX / 2) * unitsPerPx
 
   return (
     <g>
@@ -21,7 +21,8 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
       {trains.map((train) => {
         // A train reserves exactly the edges of its path, so its route is the whole path.
         const route = pathPolyline(graph, train.path, 0, pathLength(graph, train.path)).map(toView)
-        const trimmed = trimEnd(route, trimV)
+        // Trim the front, then (reversed) the rear.
+        const trimmed = trimEnd(trimEnd(route, trimV).reverse(), trimV)
         return (
           trimmed.length > 1 && (
             <polyline key={train.id} className="track track-reserved" points={viewPointsAttr(trimmed)} />
