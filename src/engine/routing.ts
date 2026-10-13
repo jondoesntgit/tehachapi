@@ -13,8 +13,6 @@ import type { GameState, RouteStep, TrackPosition, Train } from './types'
 
 /** Stop targets keep this far from either end of an edge so a stopped train never fouls a switch. */
 export const STOP_CLEARANCE_M = 20
-/** A target this close to a terminal's end of the line means "leave through the terminal". */
-export const EXIT_SNAP_M = 1
 
 export type RouteFailure =
   /** No track leads from the head to the target without reversing. */
@@ -101,15 +99,14 @@ export function findSteps(
 }
 
 /**
- * Where on `step` the head should stop for a tap at `offsetM`, or whether it should exit instead.
- * A train pulls up to the far end of the tapped block (short of the switch by the clearance),
- * wherever in it the tap landed, so the block behind it is left clear.
+ * Where on `step` the head should stop for a tap anywhere in its block, or whether it should exit.
+ * A train pulls up to the far end of the tapped block (short of the switch by the clearance), so the
+ * block behind it is left clear. A block that ends at a terminal always has room beyond it, so a
+ * train sent into one runs out through the terminal.
  */
-function resolveStop(graph: TrackGraph, step: RouteStep, offsetM: number): { alongM: number; exit: boolean } {
+function resolveStop(graph: TrackGraph, step: RouteStep): { alongM: number; exit: boolean } {
   const edge = getEdge(graph, step.edgeId)
-  const rawM = alongStep(edge, step.direction, Math.min(edge.lengthM, Math.max(0, offsetM)))
-  const endsAtTerminal = getNode(graph, stepEndNode(edge, step.direction)).kind === 'terminal'
-  if (endsAtTerminal && rawM >= edge.lengthM - EXIT_SNAP_M) return { alongM: edge.lengthM, exit: true }
+  if (getNode(graph, stepEndNode(edge, step.direction)).kind === 'terminal') return { alongM: edge.lengthM, exit: true }
   return { alongM: edge.lengthM - Math.min(STOP_CLEARANCE_M, edge.lengthM / 2), exit: false }
 }
 
@@ -145,7 +142,7 @@ export function requestRoute(
   }
 
   let steps: RouteStep[] = []
-  const onHeadEdge = target.edgeId === headStep.edgeId ? resolveStop(graph, headStep, target.offsetM) : null
+  const onHeadEdge = target.edgeId === headStep.edgeId ? resolveStop(graph, headStep) : null
   if (!onHeadEdge || onHeadEdge.alongM <= head.alongM) {
     const found = findSteps(graph, headStep, target, heldByOthers)
     if (!found) {
@@ -164,7 +161,7 @@ export function requestRoute(
 
   const path = [...train.path.slice(0, head.index + 1), ...steps]
   const lastStep = path[path.length - 1]
-  const stop = steps.length > 0 ? resolveStop(graph, lastStep, target.offsetM) : onHeadEdge!
+  const stop = steps.length > 0 ? resolveStop(graph, lastStep) : onHeadEdge!
   const lastStartM = pathLength(graph, path) - getEdge(graph, lastStep.edgeId).lengthM
   const stopAtM = lastStartM + stop.alongM
 

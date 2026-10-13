@@ -74,6 +74,7 @@ src/
     TrackLayer.tsx   # <polyline> per edge; green when reserved
     TrainLayer.tsx   # Thick <polyline> per train body in its destination's color, label, stop marker
     Hud.tsx          # Clock, speed buttons, train list, messages, level-complete panel
+  (index.css)        # The map sits between the top bar and the train list so neither covers track
   input/
     useTapRouting.ts # Tap train -> select; tap track or terminal -> request route
   store.ts           # Zustand: holds engine state, time scale, selection; runs the fixed-step loop
@@ -102,7 +103,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
   - The shortest path that avoids edges reserved by other trains wins, so a train takes a siding by itself when the main is held.
   - On success, every edge in the train's path is reserved by it (`GameState.reservations`). Reserved edges render green.
   - A train pulls up to the far end of the tapped edge (block), `STOP_CLEARANCE_M` (20 m) short of the switch, wherever in it the tap landed, so the block behind it is clear and a stopped train never fouls a switch (`resolveStop`).
-  - A target at a terminal's end of the line becomes an exit.
+  - Each end of track always has room to clear arriving trains: a target anywhere in a block that ends at a terminal becomes an exit. The store shows a message when a train clears its terminal, saying whether it was on time.
   - Refusals: `no-path`, `blocked` (names the train in the way), `too-close` (cannot brake in time), `departing`, `wrong-destination`.
   - `wrong-destination`: from the target, the train could only leave by a terminal other than its destination (`canReach`). The refusal carries a new `state` in which the train's due time is `WRONG_DESTINATION_PENALTY_S` (3 min) earlier; the store applies it.
 - **Releasing:** in `step`, an edge is dropped from `path` and its reservation released once the tail clears it.

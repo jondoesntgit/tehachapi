@@ -73,6 +73,12 @@ describe('requestRoute', () => {
     expect(state.trains[0].stopAtM).toBeCloseTo(1000 + 1200 - STOP_CLEARANCE_M)
   })
 
+  it('sends a train out through the terminal when it is routed anywhere into the last block', () => {
+    for (const offsetM of [100, 500, 980]) {
+      expect(route(graph, withT1(), 'T1', { edgeId: 'M5', offsetM }).trains[0].stopAtM).toBeNull()
+    }
+  })
+
   it('turns a target at the far terminal into an exit', () => {
     const state = route(graph, withT1(), 'T1', { edgeId: 'M5', offsetM: 1000 })
     expect(state.trains[0].stopAtM).toBeNull()

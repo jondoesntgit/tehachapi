@@ -84,11 +84,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (next === game) return
     const stillThere = next.trains.some((t) => t.id === selectedTrainId)
     // A train entering is the dispatcher's cue to act, so drop out of fast-forward.
-    const arrived = next.trains.length > game.trains.length
+    const entered = next.trains.some((t) => !game.trains.some((g) => g.id === t.id))
+    // Say how each train that just cleared its terminal did.
+    const cleared = next.results.slice(game.results.length)
+    const label = (nodeId: string) => graph.nodes.get(nodeId)?.label ?? nodeId
+    const arrivalMessage = cleared
+      .map((r) => `${r.trainId} reached ${label(r.exitedAt)} ${r.lateMinutes === 0 ? 'on time' : `${r.lateMinutes} min late`}`)
+      .join(' · ')
     set({
       game: next,
       selectedTrainId: stillThere ? selectedTrainId : null,
-      timeScale: arrived ? 1 : timeScale,
+      timeScale: entered ? 1 : timeScale,
+      ...(arrivalMessage && { message: arrivalMessage }),
     })
   },
 

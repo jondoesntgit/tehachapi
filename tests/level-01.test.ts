@@ -44,7 +44,7 @@ describe('level 1', () => {
   })
 
   it('has a wye off the main between sidings B and C, open to trains from either side', () => {
-    expect(graph.nodes.get('SOUTHEAST')).toMatchObject({ kind: 'terminal', label: 'Southeast' })
+    expect(graph.nodes.get('SOUTHEAST')).toMatchObject({ kind: 'terminal', label: 'SE-Terminal' })
     const ids = (steps: { edgeId: string }[]) => steps.map((s) => s.edgeId).sort()
     // Eastbound trains can turn down the west leg, westbound ones down the east leg.
     expect(ids(nextSteps(graph, { edgeId: 'M5', direction: 1 }))).toEqual(['M5M', 'SPUR_W'])
@@ -129,7 +129,7 @@ describe('level 1', () => {
     expect(seen.T11.size).toBeGreaterThan(50)
   })
 
-  it('sends two trains, entering from the west, to Southeast', () => {
+  it('sends two trains, entering from the west, to the SE-Terminal', () => {
     const south = level.schedule.filter((e) => e.destination === 'SOUTHEAST')
     expect(south.map((e) => [e.id, e.entry])).toEqual([['T10', 'WEST'], ['T11', 'WEST']])
     expect(graph.nodes.get('SOUTHEAST')?.color).toBeDefined()

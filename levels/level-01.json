@@ -14,7 +14,7 @@
     { "id": "SW_SW", "x": 2800, "y": 0, "kind": "switch" },
     { "id": "SW_SE", "x": 3200, "y": 0, "kind": "switch" },
     { "id": "SW_SJ", "x": 3000, "y": 100, "kind": "switch" },
-    { "id": "SOUTHEAST", "x": 6000, "y": 180, "kind": "terminal", "label": "Southeast", "color": "#ffdc3c" },
+    { "id": "SOUTHEAST", "x": 6000, "y": 180, "kind": "terminal", "label": "SE-Terminal", "color": "#ffdc3c" },
     { "id": "SW_C1", "x": 3400, "y": 0, "kind": "switch" },
     { "id": "SW_C2", "x": 4000, "y": 0, "kind": "switch" },
     { "id": "SW_D1", "x": 4700, "y": 0, "kind": "switch" },

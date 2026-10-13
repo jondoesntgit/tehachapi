@@ -37,10 +37,13 @@ body,
 }
 
 .map {
+  /* Between the top bar and the train list, so neither covers any track. */
   position: absolute;
-  inset: 0;
+  top: calc(max(8px, env(safe-area-inset-top)) + 52px);
+  bottom: calc(max(8px, env(safe-area-inset-bottom)) + 52px);
+  left: 0;
   width: 100%;
-  height: 100%;
+  height: auto;
   touch-action: manipulation;
 }
 
