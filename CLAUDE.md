@@ -1,6 +1,6 @@
 # Railroad Dispatcher — Project Guide for Claude
 
-A browser-first railroad dispatching game. The player routes trains along a real-world-inspired local line by tapping a train, then tapping a destination. The route turns green, and the train accelerates, cruises, and brakes to a stop at the target. The primary device is an iPhone in landscape. It will later be packaged as a native iOS/Android app.
+A browser-first railroad dispatching game. The player routes trains along a real-world-inspired local line by tapping a train, then tapping a destination. The route turns green, and the train accelerates, cruises, and brakes to a stop at the far end of the tapped block. The primary device is an iPhone in landscape. It will later be packaged as a native iOS/Android app.
 
 - Repo: https://github.com/jondoesntgit/tehachapi
 - Live game: http://github.jamwheeler.com/tehachapi/ (GitHub Pages; redeploys on every push to `main`)
@@ -101,7 +101,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Routes** (`requestRoute`):
   - The shortest path that avoids edges reserved by other trains wins, so a train takes a siding by itself when the main is held.
   - On success, every edge in the train's path is reserved by it (`GameState.reservations`). Reserved edges render green.
-  - Stop targets are kept `STOP_CLEARANCE_M` (20 m) from either end of an edge, so a stopped train never fouls a switch.
+  - A train pulls up to the far end of the tapped edge (block), `STOP_CLEARANCE_M` (20 m) short of the switch, wherever in it the tap landed, so the block behind it is clear and a stopped train never fouls a switch (`resolveStop`).
   - A target at a terminal's end of the line becomes an exit.
   - Refusals: `no-path`, `blocked` (names the train in the way), `too-close` (cannot brake in time), `departing`, `wrong-destination`.
   - `wrong-destination`: from the target, the train could only leave by a terminal other than its destination (`canReach`). The refusal carries a new `state` in which the train's due time is `WRONG_DESTINATION_PENALTY_S` (3 min) earlier; the store applies it.

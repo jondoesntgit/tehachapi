@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
 import { canReach, findSteps, requestRoute, STOP_CLEARANCE_M, WRONG_DESTINATION_PENALTY_S } from '../src/engine/routing'
 import { createInitialState, step } from '../src/engine/simulation'
-import { buildGraph } from '../src/engine/trackGraph'
+import { buildGraph, getEdge, locateOnPath } from '../src/engine/trackGraph'
 import type { GameState } from '../src/engine/types'
 import { level, route, runUntil } from './helpers'
 
@@ -41,12 +41,25 @@ describe('findSteps', () => {
 })
 
 describe('requestRoute', () => {
-  it('reserves every edge from the head to the target', () => {
+  it('reserves every edge from the head to the target, and pulls up to the far end of that block', () => {
     const state = route(graph, withT1(), 'T1', { edgeId: 'SIDING_B', offsetM: 500 })
     const t1 = state.trains[0]
     expect(t1.path.map((s) => s.edgeId)).toEqual(['M1', 'M2', 'M3', 'SIDING_B'])
     expect(state.reservations).toEqual({ M1: 'T1', M2: 'T1', M3: 'T1', SIDING_B: 'T1' })
-    expect(t1.stopAtM).toBeCloseTo(1000 + 1200 + 1600 + 500)
+    const sidingM = getEdge(graph, 'SIDING_B').lengthM
+    expect(t1.stopAtM).toBeCloseTo(1000 + 1200 + 1600 + sidingM - STOP_CLEARANCE_M)
+  })
+
+  it('stops at the same place wherever in the block the tap lands', () => {
+    const stops = [50, 600, 1150].map((offsetM) => route(graph, withT1(), 'T1', { edgeId: 'M2', offsetM }).trains[0].stopAtM)
+    expect(stops).toEqual([stops[0], stops[0], stops[0]])
+    expect(stops[0]).toBeCloseTo(1000 + 1200 - STOP_CLEARANCE_M)
+  })
+
+  it('pulls a westbound train up to the west end of its block', () => {
+    const state = route(graph, withT1AndT2(), 'T2', { edgeId: 'M4', offsetM: 1100 })
+    const t2 = state.trains.find((t) => t.id === 'T2')!
+    expect(locateOnPath(graph, t2.path, t2.stopAtM!)).toEqual({ edgeId: 'M4', offsetM: STOP_CLEARANCE_M, direction: -1 })
   })
 
   it('drops reservations the new route no longer needs', () => {
@@ -70,7 +83,8 @@ describe('requestRoute', () => {
   })
 
   it('refuses a target behind the head', () => {
-    const state = runUntil(graph, withT1(), (s) => s.trains[0].headM > 500)
+    let state = route(graph, withT1(), 'T1', { edgeId: 'M3', offsetM: 800 })
+    state = runUntil(graph, state, (s) => s.trains[0].path[0].edgeId === 'M2')
     expect(requestRoute(graph, state, 'T1', { edgeId: 'M1', offsetM: 100 })).toMatchObject({
       ok: false,
       reason: 'no-path',
@@ -79,13 +93,14 @@ describe('requestRoute', () => {
 
   it('refuses a target the train cannot brake for', () => {
     let state = route(graph, withT1(), 'T1', { edgeId: 'M3', offsetM: 800 })
-    state = runUntil(graph, state, (s) => s.trains[0].speedMps === 18)
-    const head = state.trains[0].headM
-    expect(requestRoute(graph, state, 'T1', { edgeId: 'M1', offsetM: head + 50 })).toMatchObject({
+    // At 18 m/s the train needs ~460 m to stop; the end of M1 is closer than that.
+    state = runUntil(graph, state, (s) => s.trains[0].headM >= 600)
+    expect(state.trains[0].speedMps).toBe(18)
+    expect(requestRoute(graph, state, 'T1', { edgeId: 'M1', offsetM: 700 })).toMatchObject({
       ok: false,
       reason: 'too-close',
     })
-    expect(state.trains[0].stopAtM).toBeCloseTo(1000 + 1200 + 800)
+    expect(state.trains[0].stopAtM).toBeCloseTo(1000 + 1200 + 1600 - STOP_CLEARANCE_M)
   })
 
   it('routes around an occupied main via the siding', () => {

@@ -100,14 +100,17 @@ export function findSteps(
   return steps
 }
 
-/** Where on `step` the head should stop for a tap at `offsetM`, or whether it should exit instead. */
+/**
+ * Where on `step` the head should stop for a tap at `offsetM`, or whether it should exit instead.
+ * A train pulls up to the far end of the tapped block (short of the switch by the clearance),
+ * wherever in it the tap landed, so the block behind it is left clear.
+ */
 function resolveStop(graph: TrackGraph, step: RouteStep, offsetM: number): { alongM: number; exit: boolean } {
   const edge = getEdge(graph, step.edgeId)
   const rawM = alongStep(edge, step.direction, Math.min(edge.lengthM, Math.max(0, offsetM)))
   const endsAtTerminal = getNode(graph, stepEndNode(edge, step.direction)).kind === 'terminal'
   if (endsAtTerminal && rawM >= edge.lengthM - EXIT_SNAP_M) return { alongM: edge.lengthM, exit: true }
-  const clearance = Math.min(STOP_CLEARANCE_M, edge.lengthM / 2)
-  return { alongM: Math.min(edge.lengthM - clearance, Math.max(clearance, rawM)), exit: false }
+  return { alongM: edge.lengthM - Math.min(STOP_CLEARANCE_M, edge.lengthM / 2), exit: false }
 }
 
 /**
