@@ -1,4 +1,5 @@
-import { pathLength, pathPolyline } from '../engine/trackGraph'
+import { getEdge, pathLength, pathPolyline, type TrackGraph } from '../engine/trackGraph'
+import type { LevelNode, Vec2 } from '../engine/types'
 import { useGameStore } from '../store'
 import { LABEL_SIZE, pointsAttr, PX_PER_MM, toView, trimEnd, viewPointsAttr } from './view'
 
@@ -6,6 +7,20 @@ import { LABEL_SIZE, pointsAttr, PX_PER_MM, toView, trimEnd, viewPointsAttr } fr
 const ROUTE_GAP_MM = 1
 /** Matches `.track-reserved` stroke-width. Each round cap pokes out half of it past its end point. */
 const RESERVED_STROKE_PX = 4
+
+/** Half-length of a terminal's end-of-line bar, in view units. */
+const PORTAL_HALF = 90
+
+/** Unit vector, in view space, pointing along the track out through a terminal. */
+function outward(graph: TrackGraph, node: LevelNode): Vec2 {
+  const edgeId = graph.edgesAt.get(node.id)?.[0]
+  if (!edgeId) return { x: 1, y: 0 }
+  const { polyline, from } = getEdge(graph, edgeId)
+  const inner = toView(from === node.id ? polyline[1] : polyline[polyline.length - 2])
+  const end = toView(node)
+  const length = Math.hypot(end.x - inner.x, end.y - inner.y)
+  return { x: (end.x - inner.x) / length, y: (end.y - inner.y) / length }
+}
 
 export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
   const graph = useGameStore((s) => s.graph)
@@ -34,10 +49,20 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
         if (node.kind !== 'terminal') {
           return node.kind === 'switch' ? <circle key={node.id} className="switch" cx={p.x} cy={p.y} r={22} /> : null
         }
+        // The bar crosses the track. The label sits under the bar, or past the end of a track that runs down.
+        const out = outward(graph, node)
+        const horizontal = Math.abs(out.x) >= Math.abs(out.y)
+        const labelY = horizontal ? p.y + PORTAL_HALF + LABEL_SIZE * 1.2 : p.y + Math.sign(out.y) * LABEL_SIZE * 1.6
         return (
           <g key={node.id}>
-            <line className="portal" x1={p.x} y1={p.y - 90} x2={p.x} y2={p.y + 90} />
-            <text className="label" x={p.x} y={p.y + 90 + LABEL_SIZE * 1.2} fontSize={LABEL_SIZE} textAnchor="middle">
+            <line
+              className="portal"
+              x1={p.x - out.y * PORTAL_HALF}
+              y1={p.y + out.x * PORTAL_HALF}
+              x2={p.x + out.y * PORTAL_HALF}
+              y2={p.y - out.x * PORTAL_HALF}
+            />
+            <text className="label" x={p.x} y={labelY} fontSize={LABEL_SIZE} textAnchor="middle">
               {node.label ?? node.id}
             </text>
           </g>

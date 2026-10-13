@@ -3,7 +3,7 @@ import { parseClock } from '../src/engine/clock'
 import { requestRoute } from '../src/engine/routing'
 import { buildTimetable, isLevelComplete } from '../src/engine/scheduler'
 import { createInitialState } from '../src/engine/simulation'
-import { buildGraph, getEdge } from '../src/engine/trackGraph'
+import { buildGraph, getEdge, nextSteps } from '../src/engine/trackGraph'
 import type { GameState, TrackPosition } from '../src/engine/types'
 import { graph1 as graph, level1 as level, route, runUntil } from './helpers'
 
@@ -28,6 +28,22 @@ describe('level 1', () => {
     }
     expect(level.schedule).toHaveLength(9)
     expect(level.startingTrains).toHaveLength(3)
+  })
+
+  it('has a South spur off the main between sidings B and C, facing eastbound trains', () => {
+    expect(graph.nodes.get('SOUTH')).toMatchObject({ kind: 'terminal', label: 'South' })
+    expect(getEdge(graph, 'SPUR_S')).toMatchObject({ from: 'SW_S', to: 'SOUTH' })
+    const ids = (steps: { edgeId: string }[]) => steps.map((s) => s.edgeId).sort()
+    expect(ids(nextSteps(graph, { edgeId: 'M5', direction: 1 }))).toEqual(['M5E', 'SPUR_S'])
+    expect(ids(nextSteps(graph, { edgeId: 'M5E', direction: -1 }))).toEqual(['M5'])
+    expect(ids(nextSteps(graph, { edgeId: 'SPUR_S', direction: -1 }))).toEqual(['M5'])
+  })
+
+  it('lets an eastbound train leave through South, scored as the wrong exit', () => {
+    let state = runUntil(graph, createInitialState(graph), has('T1'))
+    state = routeWhenClear(state, 'T1', { edgeId: 'SPUR_S', offsetM: getEdge(graph, 'SPUR_S').lengthM })
+    state = runUntil(graph, state, (s) => s.results.some((r) => r.trainId === 'T1'))
+    expect(state.results.find((r) => r.trainId === 'T1')).toMatchObject({ exitedAt: 'SOUTH', reachedDestination: false })
   })
 
   it('keeps the written timetable without a seed', () => {
