@@ -27,17 +27,32 @@ describe('level 1', () => {
       expect(lengthM).toBeGreaterThanOrEqual(level.trainLengthM + 40)
       expect(lengthM).toBeLessThan(700)
     }
-    expect(level.schedule).toHaveLength(11)
+    expect(level.schedule).toHaveLength(12)
     expect(level.startingTrains).toHaveLength(3)
   })
 
-  it('has a South spur off the main between sidings B and C, facing eastbound trains', () => {
+  it('has a South wye off the main between sidings B and C, open to trains from either side', () => {
     expect(graph.nodes.get('SOUTH')).toMatchObject({ kind: 'terminal', label: 'South' })
-    expect(getEdge(graph, 'SPUR_S')).toMatchObject({ from: 'SW_S', to: 'SOUTH' })
     const ids = (steps: { edgeId: string }[]) => steps.map((s) => s.edgeId).sort()
-    expect(ids(nextSteps(graph, { edgeId: 'M5', direction: 1 }))).toEqual(['M5E', 'SPUR_S'])
-    expect(ids(nextSteps(graph, { edgeId: 'M5E', direction: -1 }))).toEqual(['M5'])
-    expect(ids(nextSteps(graph, { edgeId: 'SPUR_S', direction: -1 }))).toEqual(['M5'])
+    // Eastbound trains can turn down the west leg, westbound ones down the east leg.
+    expect(ids(nextSteps(graph, { edgeId: 'M5', direction: 1 }))).toEqual(['M5M', 'SPUR_W'])
+    expect(ids(nextSteps(graph, { edgeId: 'M5E', direction: -1 }))).toEqual(['M5M', 'SPUR_E'])
+    // Coming up from South, a train can head either way.
+    expect(ids(nextSteps(graph, { edgeId: 'SPUR_S', direction: -1 }))).toEqual(['SPUR_E', 'SPUR_W'])
+    expect(ids(nextSteps(graph, { edgeId: 'SPUR_E', direction: -1 }))).toEqual(['M5E'])
+    expect(ids(nextSteps(graph, { edgeId: 'SPUR_W', direction: -1 }))).toEqual(['M5'])
+  })
+
+  it('brings a train up from South and lets it head east', () => {
+    const t12 = level.schedule.find((e) => e.id === 'T12')!
+    expect([t12.entry, t12.destination]).toEqual(['SOUTH', 'EAST'])
+    let state = runUntil(graph, createInitialState(graph), has('T12'))
+    expect(state.trains.find((t) => t.id === 'T12')!.path[0]).toEqual({ edgeId: 'SPUR_S', direction: -1 })
+    // Nobody has dispatched T2, which holds the east entry, so stop T12 short of it.
+    state = routeWhenClear(state, 'T12', { edgeId: 'M7', offsetM: 600 })
+    expect(state.trains.find((t) => t.id === 'T12')!.path.map((s) => s.edgeId).slice(0, 3)).toEqual([
+      'SPUR_S', 'SPUR_E', 'M5E',
+    ])
   })
 
   it('lets an eastbound train leave through South, scored as the wrong exit', () => {
@@ -59,7 +74,7 @@ describe('level 1', () => {
     const windows: Record<string, [string, string]> = {
       T1: ['10:00', '10:25'], T2: ['10:00', '10:25'], T3: ['10:00', '10:25'],
       T7: ['10:30', '11:30'], T8: ['10:30', '11:30'], T9: ['10:30', '11:30'],
-      T10: ['10:00', '11:00'], T11: ['10:30', '11:30'],
+      T10: ['10:00', '11:00'], T11: ['10:30', '11:30'], T12: ['10:30', '11:15'],
     }
     const seen: Record<string, Set<number>> = {}
     for (let seed = 0; seed < 200; seed++) {
@@ -158,6 +173,10 @@ describe('level 1', () => {
     state = runUntil(graph, state, has('T10'))
     state = routeWhenClear(state, 'T10', SOUTH_EXIT)
 
+    // T12 comes up from South once T10 is down, and turns east up the wye's east leg.
+    state = runUntil(graph, state, has('T12'))
+    state = routeWhenClear(state, 'T12', EAST_EXIT)
+
     // Express T4 follows T2 west; local T5 waits in siding D for freight T6, then runs east.
     state = runUntil(graph, state, has('T4'))
     state = routeWhenClear(state, 'T4', WEST_EXIT)
@@ -181,7 +200,7 @@ describe('level 1', () => {
     state = runUntil(graph, state, isLevelComplete)
 
     expect(state.results.map((r) => r.trainId).sort()).toEqual([
-      'L1', 'L2', 'L3', 'T1', 'T10', 'T11', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
+      'L1', 'L2', 'L3', 'T1', 'T10', 'T11', 'T12', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
     ])
     expect(state.results.every((r) => r.reachedDestination)).toBe(true)
     expect(state.results.filter((r) => r.lateMinutes > 0)).toEqual([])

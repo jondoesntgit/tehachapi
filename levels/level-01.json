@@ -11,8 +11,10 @@
     { "id": "SW_A2", "x": 1300, "y": 0, "kind": "switch" },
     { "id": "SW_B1", "x": 2000, "y": 0, "kind": "switch" },
     { "id": "SW_B2", "x": 2600, "y": 0, "kind": "switch" },
-    { "id": "SW_S",  "x": 3000, "y": 0, "kind": "switch" },
-    { "id": "SOUTH", "x": 3300, "y": 160, "kind": "terminal", "label": "South", "color": "#ffdc3c" },
+    { "id": "SW_SW", "x": 2800, "y": 0, "kind": "switch" },
+    { "id": "SW_SE", "x": 3200, "y": 0, "kind": "switch" },
+    { "id": "SW_SJ", "x": 3000, "y": 100, "kind": "switch" },
+    { "id": "SOUTH", "x": 3000, "y": 250, "kind": "terminal", "label": "South", "color": "#ffdc3c" },
     { "id": "SW_C1", "x": 3400, "y": 0, "kind": "switch" },
     { "id": "SW_C2", "x": 4000, "y": 0, "kind": "switch" },
     { "id": "SW_D1", "x": 4700, "y": 0, "kind": "switch" },
@@ -24,8 +26,9 @@
     { "id": "M2", "from": "SW_A1", "to": "SW_A2" },
     { "id": "M3", "from": "SW_A2", "to": "SW_B1" },
     { "id": "M4", "from": "SW_B1", "to": "SW_B2" },
-    { "id": "M5", "from": "SW_B2", "to": "SW_S" },
-    { "id": "M5E", "from": "SW_S", "to": "SW_C1" },
+    { "id": "M5", "from": "SW_B2", "to": "SW_SW" },
+    { "id": "M5M", "from": "SW_SW", "to": "SW_SE" },
+    { "id": "M5E", "from": "SW_SE", "to": "SW_C1" },
     { "id": "M6", "from": "SW_C1", "to": "SW_C2" },
     { "id": "M7", "from": "SW_C2", "to": "SW_D1" },
     { "id": "M8", "from": "SW_D1", "to": "SW_D2" },
@@ -34,7 +37,9 @@
     { "id": "SIDING_B", "from": "SW_B1", "to": "SW_B2", "points": [[2100, 60], [2500, 60]] },
     { "id": "SIDING_C", "from": "SW_C1", "to": "SW_C2", "points": [[3500, -60], [3900, -60]] },
     { "id": "SIDING_D", "from": "SW_D1", "to": "SW_D2", "points": [[4800, 60], [5200, 60]] },
-    { "id": "SPUR_S", "from": "SW_S", "to": "SOUTH", "points": [[3150, 40]] }
+    { "id": "SPUR_W", "from": "SW_SW", "to": "SW_SJ", "points": [[2900, 30]] },
+    { "id": "SPUR_E", "from": "SW_SE", "to": "SW_SJ", "points": [[3100, 30]] },
+    { "id": "SPUR_S", "from": "SW_SJ", "to": "SOUTH" }
   ],
   "startingTrains": [
     {
@@ -108,6 +113,11 @@
       "id": "T11", "name": "Southbound Local 111",
       "appearsAt": "11:26", "appearsBetween": ["10:30", "11:30"], "entry": "WEST",
       "maxSpeedMps": 12, "destination": "SOUTH", "dueAt": "11:50"
+    },
+    {
+      "id": "T12", "name": "Eastbound Freight 112",
+      "appearsAt": "10:35", "appearsBetween": ["10:30", "11:15"], "entry": "SOUTH",
+      "maxSpeedMps": 15, "destination": "EAST", "dueAt": "10:55"
     }
   ]
 }

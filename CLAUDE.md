@@ -147,7 +147,7 @@ Done:
 3. Render track + trains in SVG, fit to screen.
 4. Tap-to-route with reservations (green).
 5. Clock, HUD, scheduler from JSON, fast-forward.
-6. Level 1: four sidings, a South spur, fourteen trains (two bound for South; three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring, randomized entry times, trains colored by destination.
+6. Level 1: four sidings, a South wye, fifteen trains (two bound for South, one entering from it; three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring, randomized entry times, trains colored by destination.
 
 Next:
 7. Deadlock detection and a level-failed state; end-of-level score summary.
