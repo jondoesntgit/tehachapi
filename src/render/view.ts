@@ -62,3 +62,6 @@ export function viewBox(graph: TrackGraph): string {
 export function destinationColor(graph: TrackGraph, destination: string): string | undefined {
   return graph.nodes.get(destination)?.color
 }
+
+/** Work trains aren't heading anywhere the dispatcher chose, so they get a neutral color. */
+export const WORK_TRAIN_COLOR = '#d7dee8'

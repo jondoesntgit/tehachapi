@@ -95,6 +95,8 @@ export interface Level {
   startingTrains?: StartingTrain[]
   /** Extra text on the map, e.g. naming a branch. */
   labels?: MapLabel[]
+  /** Send work trains through gaps in the timetable (see `spawnWorkTrain`). */
+  workTrains?: boolean
 }
 
 /** 1 = travelling from the edge's `from` node toward `to`; -1 = the reverse. */
@@ -135,6 +137,8 @@ export interface Train {
   stopAtM: number | null
   /** Game time the head reached the exit terminal, once it has. */
   arrivedAtS: number | null
+  /** A work train: sent by the game along a random route, not dispatched or scored. */
+  work?: boolean
 }
 
 export interface TrainResult {
@@ -164,5 +168,9 @@ export interface GameState {
   pending: string[]
   /** Schedule entry id -> this game's times. */
   timetable: Record<string, TimetableEntry>
+  /** The game's random seed (0 without one); work trains draw their routes from it. */
+  seed: number
+  /** Work trains sent so far. */
+  workTrainsSent: number
   results: TrainResult[]
 }

@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { useGameStore } from '../store'
+import { WORK_TRAIN_COLOR } from './view'
 
 /** A short stretch of map drawn with the same classes the map uses, so the legend can't drift. */
 function Swatch({ children }: { children: ReactNode }) {
@@ -36,6 +37,10 @@ export function Help({ onClose }: { onClose: () => void }) {
       ),
       text: `Train heading to ${node.label ?? node.id}`,
     }))
+  trainColors.push({
+    swatch: <polyline className="train" style={{ '--train-color': WORK_TRAIN_COLOR } as CSSProperties} points="6,10 42,10" />,
+    text: 'Work train (W), runs itself',
+  })
   const legend = [...LEGEND.slice(0, 2), ...trainColors, ...LEGEND.slice(2)]
   return (
     <div className="hud help-backdrop" onClick={onClose}>
@@ -71,6 +76,8 @@ export function Help({ onClose }: { onClose: () => void }) {
               Trains cannot reverse. A route takes a siding by itself when the main is held, and is refused if
               another train is in the way or the train cannot stop in time. Sending a train where it could
               only leave by the wrong terminal is refused, and moves its due time 3 minutes earlier.
+              When nothing is due for 5 minutes, a work train (W) runs through by itself at half speed. Your
+              score at the end is 100, less every minute trains were late.
             </p>
           </section>
 

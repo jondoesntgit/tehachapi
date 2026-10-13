@@ -1,7 +1,7 @@
 import { parseClock } from './clock'
 import { safeSpeed } from './physics'
-import { STOP_CLEARANCE_M } from './routing'
-import { getEdge, type TrackGraph } from './trackGraph'
+import { canReach, STOP_CLEARANCE_M } from './routing'
+import { getEdge, nextSteps, stepEndNode, type TrackGraph } from './trackGraph'
 import { seededRandom } from './random'
 import type { GameState, RouteStep, ScheduleEntry, TimetableEntry, Train, TrainResult } from './types'
 
@@ -137,6 +137,68 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
     reservations[edge.id] = start.id
   }
   return { trains, reservations }
+}
+
+/** A work train goes out only when nothing is on the board or due for this long. */
+export const WORK_TRAIN_CLEAR_S = 5 * 60
+/** Work trains run at this fraction of line speed (the fastest scheduled train's top speed). */
+export const WORK_TRAIN_SPEED_FACTOR = 0.5
+export const WORK_TRAIN_ID = 'W'
+
+/** Steps from `from` to `destination`, choosing at random at each facing switch among ways that still get there. */
+export function randomRoute(graph: TrackGraph, from: RouteStep, destination: string, random: () => number): RouteStep[] {
+  const path = [from]
+  for (let current = from; stepEndNode(getEdge(graph, current.edgeId), current.direction) !== destination; ) {
+    const options = nextSteps(graph, current).filter((step) => canReach(graph, step, destination))
+    if (options.length === 0 || path.length > graph.edges.size) break
+    current = options[Math.floor(random() * options.length)]
+    path.push(current)
+  }
+  return path
+}
+
+/**
+ * When the board is empty and no scheduled train is due for `WORK_TRAIN_CLEAR_S`, sends a work train
+ * in at a random terminal along a random route out through another, at half line speed. It holds
+ * its whole route, so scheduled trains that come up meanwhile may wait at their portal.
+ */
+export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
+  if (!graph.level.workTrains || state.trains.length > 0 || state.pending.length === 0) return state
+  const nextS = nextArrivalS(state)
+  if (nextS === null || nextS - state.timeS < WORK_TRAIN_CLEAR_S) return state
+
+  const random = seededRandom((state.seed ^ 0x3017) + state.workTrainsSent * 7919)
+  const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
+  const entry = terminals[Math.floor(random() * terminals.length)]
+  const first = entryStep(graph, entry)
+  const exits = terminals.filter((id) => id !== entry && canReach(graph, first, id))
+  if (exits.length === 0) return state
+  const destination = exits[Math.floor(random() * exits.length)]
+  const path = randomRoute(graph, first, destination, random)
+
+  const lineSpeed = Math.max(...graph.level.schedule.map((e) => e.maxSpeedMps))
+  const speedMps = lineSpeed * WORK_TRAIN_SPEED_FACTOR
+  const train: Train = {
+    id: WORK_TRAIN_ID,
+    name: 'Work train',
+    maxSpeedMps: speedMps,
+    destination,
+    dueAtS: state.timeS,
+    speedMps,
+    path,
+    headM: 0,
+    stopAtM: null,
+    arrivedAtS: null,
+    work: true,
+  }
+  const reservations = { ...state.reservations }
+  for (const step of path) reservations[step.edgeId] = WORK_TRAIN_ID
+  return { ...state, trains: [...state.trains, train], reservations, workTrainsSent: state.workTrainsSent + 1 }
+}
+
+/** 100, less every minute any train was late. */
+export function levelScore(results: readonly TrainResult[]): number {
+  return 100 - results.reduce((sum, r) => sum + r.lateMinutes, 0)
 }
 
 export function scoreArrival(train: Train, arrivedAtS: number, exitedAt: string): TrainResult {

@@ -1,6 +1,6 @@
 import { parseClock } from './clock'
 import { advance } from './physics'
-import { buildTimetable, nextArrivalS, placeStartingTrains, scoreArrival, spawnDue } from './scheduler'
+import { buildTimetable, nextArrivalS, placeStartingTrains, scoreArrival, spawnDue, spawnWorkTrain } from './scheduler'
 import { getEdge, pathLength, stepEndNode, type TrackGraph } from './trackGraph'
 import type { GameState, Train } from './types'
 
@@ -17,6 +17,8 @@ export function createInitialState(graph: TrackGraph, seed?: number): GameState 
     ...placeStartingTrains(graph, seed),
     pending: graph.level.schedule.map((entry) => entry.id),
     timetable: buildTimetable(graph, seed),
+    seed: seed ?? 0,
+    workTrainsSent: 0,
     results: [],
   }
 }
@@ -51,7 +53,9 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
         // Tail is through the portal: the train is gone.
         for (const s of path) delete reservations[s.edgeId]
         const last = path[path.length - 1]
-        results.push(scoreArrival(train, arrivedAtS, stepEndNode(getEdge(graph, last.edgeId), last.direction)))
+        if (!train.work) {
+          results.push(scoreArrival(train, arrivedAtS, stepEndNode(getEdge(graph, last.edgeId), last.direction)))
+        }
         continue
       }
     }
@@ -69,15 +73,19 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
     trains.push({ ...train, speedMps: moved.speedMps, path, headM, stopAtM, arrivedAtS })
   }
 
-  return spawnDue(graph, { ...state, timeS, trains, reservations, results })
+  return spawnWorkTrain(graph, spawnDue(graph, { ...state, timeS, trains, reservations, results }))
 }
 
 /**
- * Jumps the clock to shortly before the next scheduled train. Only allowed while the board is
- * empty, so nothing that should have moved is skipped; otherwise the state is returned unchanged.
+ * Jumps the clock to shortly before the next scheduled train. Only allowed while no dispatched train
+ * is on the board, so nothing that should have moved is skipped; work trains are cleared away.
+ * Otherwise the state is returned unchanged.
  */
 export function skipToNextArrival(state: GameState, leadS = 10): GameState {
   const nextS = nextArrivalS(state)
-  if (state.trains.length > 0 || nextS === null) return state
-  return { ...state, timeS: Math.max(state.timeS, nextS - leadS) }
+  if (state.trains.some((t) => !t.work) || nextS === null) return state
+  const reservations = Object.fromEntries(
+    Object.entries(state.reservations).filter(([, holder]) => !state.trains.some((t) => t.id === holder)),
+  )
+  return { ...state, trains: [], reservations, timeS: Math.max(state.timeS, nextS - leadS) }
 }

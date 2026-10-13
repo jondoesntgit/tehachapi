@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { formatClock } from '../engine/clock'
-import { getScheduleEntry, heldAtPortal, isLevelComplete, nextArrivalS } from '../engine/scheduler'
+import { getScheduleEntry, heldAtPortal, isLevelComplete, levelScore, nextArrivalS } from '../engine/scheduler'
 import { TIME_SCALES, useGameStore } from '../store'
 import { Help } from './Help'
-import { destinationColor } from './view'
+import { destinationColor, WORK_TRAIN_COLOR } from './view'
 
 const MESSAGE_MS = 3000
 
@@ -27,7 +27,7 @@ export function Hud() {
   const upcoming = game.pending
     .map((id) => getScheduleEntry(graph, id))
     .filter((entry) => game.timetable[entry.id].appearsAtS > game.timeS)
-  const canSkip = game.trains.length === 0 && nextArrivalS(game) !== null
+  const canSkip = game.trains.every((t) => t.work) && nextArrivalS(game) !== null
   const complete = isLevelComplete(game)
   const selected = game.trains.find((t) => t.id === selectedTrainId)
 
@@ -60,6 +60,10 @@ export function Hud() {
       {complete && (
         <div className="hud summary">
           <h2>Level complete</h2>
+          <p className="score">
+            Your score is <b>{levelScore(game.results)}</b>
+          </p>
+          <p className="hint">100, less {game.results.reduce((sum, r) => sum + r.lateMinutes, 0)} minutes late in all</p>
           <button onClick={restart}>Play again</button>
         </div>
       )}
@@ -81,8 +85,9 @@ export function Hud() {
             className={train.id === selectedTrainId ? 'chip active' : 'chip'}
             onClick={() => selectTrain(train.id === selectedTrainId ? null : train.id)}
           >
-            <span className="dot" style={{ background: destinationColor(graph, train.destination) }} />
-            <b>{train.id}</b> {train.name} → {label(train.destination)} by {formatClock(train.dueAtS)} ·{' '}
+            <span className="dot" style={{ background: train.work ? WORK_TRAIN_COLOR : destinationColor(graph, train.destination) }} />
+            <b>{train.id}</b> {train.name} → {label(train.destination)}
+            {!train.work && ` by ${formatClock(train.dueAtS)}`} ·{' '}
             {Math.round(train.speedMps * 3.6)} km/h
           </button>
         ))}

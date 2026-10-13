@@ -352,3 +352,13 @@ button:disabled {
   border-radius: 50%;
   background: var(--train);
 }
+
+.summary .score {
+  margin: 8px 0 0;
+  font-size: 16px;
+}
+
+.summary .score b {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}

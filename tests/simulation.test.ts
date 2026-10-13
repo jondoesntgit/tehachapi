@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
-import { heldAtPortal, isLevelComplete } from '../src/engine/scheduler'
+import { heldAtPortal, isLevelComplete, levelScore } from '../src/engine/scheduler'
+import { requestRoute } from '../src/engine/routing'
 import { createInitialState, skipToNextArrival, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, type TrackGraph } from '../src/engine/trackGraph'
 import type { GameState } from '../src/engine/types'
@@ -166,5 +167,52 @@ describe('simulation', () => {
       return state
     }
     expect(run()).toEqual(run())
+  })
+})
+
+describe('work trains', () => {
+  // The fixture with work trains on and nothing on the board until T1 at 10:32.
+  const quiet = buildGraph({ ...level, workTrains: true, startingTrains: [] })
+  const workTrain = (s: GameState) => s.trains.find((t) => t.work)
+
+  it('sends a work train, labelled W, at half line speed, when nothing is due for 5 minutes', () => {
+    const state = step(quiet, createInitialState(quiet, 1), 0.1)
+    const w = workTrain(state)!
+    expect(w).toMatchObject({ id: 'W', name: 'Work train', stopAtM: null })
+    expect(w.maxSpeedMps).toBe(Math.max(...level.schedule.map((e) => e.maxSpeedMps)) / 2)
+    expect(Object.values(state.reservations).every((holder) => holder === 'W')).toBe(true)
+    expect(state.workTrainsSent).toBe(1)
+  })
+
+  it('runs out through a terminal on its own and is not scored', () => {
+    let state = step(quiet, createInitialState(quiet, 1), 0.1)
+    expect(requestRoute(quiet, state, 'W', { edgeId: 'M3', offsetM: 100 })).toMatchObject({ reason: 'departing' })
+    state = runUntil(quiet, state, (s) => !workTrain(s))
+    expect(state.results).toEqual([])
+    expect(Object.values(state.reservations)).not.toContain('W')
+  })
+
+  it('stays away when a scheduled train is due within 5 minutes or a train is on the board', () => {
+    const soon = { ...createInitialState(quiet, 1), timeS: parseClock('10:32') - 4 * 60 }
+    expect(workTrain(step(quiet, soon, 0.1))).toBeUndefined()
+    expect(step(graph, createInitialState(graph, 1), 0.1).trains.some((t) => t.work)).toBe(false)
+  })
+
+  it('is cleared away by skipping to the next train', () => {
+    const state = step(quiet, createInitialState(quiet, 1), 0.1)
+    const skipped = skipToNextArrival(state)
+    expect(skipped.trains).toEqual([])
+    expect(skipped.reservations).toEqual({})
+    expect(skipped.timeS).toBe(parseClock('10:32') - 10)
+  })
+})
+
+describe('levelScore', () => {
+  it('is 100 less every minute trains were late', () => {
+    const result = (lateMinutes: number) => ({
+      trainId: 'X', name: 'X', arrivedAtS: 0, dueAtS: 0, lateMinutes, exitedAt: 'EAST', reachedDestination: true,
+    })
+    expect(levelScore([])).toBe(100)
+    expect(levelScore([result(0), result(4), result(7)])).toBe(89)
   })
 })

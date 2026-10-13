@@ -118,13 +118,16 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Spawning:** at its timetabled appearance, a train's head enters at its terminal's portal with the body still off the map. It is routed to the far end of its entry edge and stops there until the player sends it on. If the entry edge is reserved, the train stays pending and the HUD warns.
 - **Starting trains:** a level's `startingTrains` are already on the board at the start, stopped on their edge with the head `STOP_CLEARANCE_M` short of the far end (`placeStartingTrains`). With a seed, a train with `edgeChoices` stands on a random one of them that no earlier starting train has taken (its own random stream, so it doesn't change the timetable draws). The whole train must fit on that edge clear of both switches.
 - **Leaving and scoring:** arrival time is when the head reaches the exit terminal; the train is removed when its tail clears. A `TrainResult` records minutes late (0 = on time) and whether it left through its scheduled destination (routing makes a wrong exit impossible, so this is always true in play).
+- **Work trains** (`spawnWorkTrain`, levels with `workTrains: true`): when the board is empty, trains are still pending and none is due for `WORK_TRAIN_CLEAR_S` (5 min), a train `W` enters at a random terminal and runs a random route (`randomRoute`, drawn from `state.seed` and `workTrainsSent`) out through another, at half line speed (half the fastest scheduled top speed). It holds its whole route, can't be dispatched, isn't scored, doesn't end fast-forward, and "Skip to next train" clears it away.
+- **Score:** `levelScore` = 100 less the total minutes late; the level-complete panel shows it.
 - **No fail state yet.** Reservations and the exact stop make collisions and overruns impossible. Two trains routed nose to nose on single track simply deadlock, undetected.
-- **Fast-forward:** the store drops back to 1× whenever a train enters. "Skip to next train" only works while the board is empty.
+- **Fast-forward:** the store drops back to 1× whenever a train enters. "Skip to next train" only works while no dispatched train is on the board.
 
 ## Level file format (`levels/*.json`)
 
 See `levels/level-01.json`. Key fields:
 - `startTime` — game clock at level start, `"HH:MM"`.
+- `workTrains` (optional) — send work trains through gaps in the timetable.
 - `appearsJitterMin` (optional) — max random shift, in minutes either way, applied to each scheduled train per game.
 - `trainLengthM`, `physics.accelMps2`, `physics.decelMps2`, `physics.stopMarginM`.
 - `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label?, color? }`. A terminal's `color` is the color of trains heading there (map, train list, help legend).
@@ -152,7 +155,7 @@ Done:
 3. Render track + trains in SVG, fit to screen.
 4. Tap-to-route with reservations (green).
 5. Clock, HUD, scheduler from JSON, fast-forward.
-6. Level 1: four sidings, a wye to an SE line running under the main (three blocks, a passing siding, tinted, labelled), sixteen trains (two bound for Southeast, two entering from it; three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring, randomized entry times, trains colored by destination.
+6. Level 1: four sidings, a wye to an SE line running under the main (three blocks, a passing siding, tinted, labelled), sixteen trains (two bound for Southeast, two entering from it; three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring out of 100, work trains in timetable gaps, randomized entry times, trains colored by destination.
 
 Next:
 7. Deadlock detection and a level-failed state; end-of-level score summary.

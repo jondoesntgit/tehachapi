@@ -88,11 +88,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const stillThere = next.trains.some((t) => t.id === selectedTrainId)
     // A train entering is the dispatcher's cue to act, so drop out of fast-forward.
     const newTrains = next.trains.filter((t) => !game.trains.some((g) => g.id === t.id))
-    const entered = newTrains.length > 0
+    // Work trains don't need the dispatcher, so they don't end fast-forward.
+    const entered = newTrains.some((t) => !t.work)
     const entryCounts = { ...get().entryCounts }
     for (const train of newTrains) {
-      const terminal = graph.level.schedule.find((e) => e.id === train.id)?.entry
-      if (terminal) entryCounts[terminal] = (entryCounts[terminal] ?? 0) + 1
+      const first = graph.edges.get(train.path[0].edgeId)!
+      const terminal = train.path[0].direction === 1 ? first.from : first.to
+      entryCounts[terminal] = (entryCounts[terminal] ?? 0) + 1
     }
     // Say how each train that just cleared its terminal did.
     const cleared = next.results.slice(game.results.length)
@@ -104,7 +106,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       game: next,
       selectedTrainId: stillThere ? selectedTrainId : null,
       timeScale: entered ? 1 : timeScale,
-      ...(entered && { entryCounts }),
+      ...(newTrains.length > 0 && { entryCounts }),
       ...(arrivalMessage && { message: arrivalMessage }),
     })
   },

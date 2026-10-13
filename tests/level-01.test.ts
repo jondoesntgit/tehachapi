@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
 import { hasRoom, requestRoute } from '../src/engine/routing'
 import { buildTimetable, isLevelComplete } from '../src/engine/scheduler'
-import { createInitialState } from '../src/engine/simulation'
+import { createInitialState, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, nextSteps } from '../src/engine/trackGraph'
 import type { GameState, TrackPosition } from '../src/engine/types'
 import { graph1 as graph, level1 as level, route, runUntil } from './helpers'
@@ -110,6 +110,24 @@ describe('level 1', () => {
     expect(again).toMatchObject({ ok: false, reason: 'wrong-destination' })
     expect(again.ok || again.state!.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(dueAtS - 6 * 60)
   })
+  it('sends work trains along random routes that always end at a terminal', () => {
+    const terminals = new Set([...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id))
+    const routes = new Set<string>()
+    for (let seed = 0; seed < 40; seed++) {
+      // Board cleared, next train far off: a work train goes out.
+      const base = createInitialState(graph, seed)
+      const firstS = Math.min(...Object.values(base.timetable).map((t) => t.appearsAtS))
+      const empty = { ...base, trains: [], reservations: {}, timeS: firstS - 20 * 60 }
+      const w = step(graph, empty, 0.1).trains.find((t) => t.work)!
+      const last = w.path[w.path.length - 1]
+      const exit = getEdge(graph, last.edgeId)[last.direction === 1 ? 'to' : 'from']
+      expect(terminals.has(exit)).toBe(true)
+      expect(exit).toBe(w.destination)
+      routes.add(w.path.map((s) => s.edgeId).join(','))
+    }
+    expect(routes.size).toBeGreaterThan(5)
+  })
+
   it('keeps the written timetable without a seed', () => {
     const timetable = buildTimetable(graph)
     for (const entry of level.schedule) {
