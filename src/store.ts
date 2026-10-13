@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import level01 from '../levels/level-01.json'
-import { requestRoute, type RouteFailure } from './engine/routing'
+import { requestRoute, WRONG_DESTINATION_PENALTY_S, type RouteFailure } from './engine/routing'
 import { createInitialState, FIXED_DT_S, skipToNextArrival, step } from './engine/simulation'
 import { buildGraph, type TrackGraph } from './engine/trackGraph'
 import type { GameState, Level, TrackPosition } from './engine/types'
@@ -37,7 +37,14 @@ const newGame = (graph: TrackGraph) => createInitialState(graph, Math.floor(Math
 // Game time owed to the simulation but not yet a whole fixed step.
 let accumulatorS = 0
 
-function failureMessage(reason: RouteFailure, blockedBy: string | undefined, game: GameState): string {
+const WRONG_DESTINATION_PENALTY_MIN = WRONG_DESTINATION_PENALTY_S / 60
+
+function failureMessage(
+  reason: RouteFailure,
+  blockedBy: string | undefined,
+  game: GameState,
+  trainId: string,
+): string {
   switch (reason) {
     case 'blocked': {
       const blocker = game.trains.find((t) => t.id === blockedBy)
@@ -49,6 +56,11 @@ function failureMessage(reason: RouteFailure, blockedBy: string | undefined, gam
       return 'Train is already leaving'
     case 'no-path':
       return 'No route there — trains cannot reverse'
+    case 'wrong-destination': {
+      const train = game.trains.find((t) => t.id === trainId)
+      const where = train && (graph.nodes.get(train.destination)?.label ?? train.destination)
+      return `Wrong way — ${train?.id ?? 'this train'} must go to ${where}. Now due ${WRONG_DESTINATION_PENALTY_MIN} min earlier.`
+    }
   }
 }
 
@@ -87,7 +99,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!selectedTrainId) return
     const result = requestRoute(graph, game, selectedTrainId, target)
     if (result.ok) set({ game: result.state, message: null })
-    else set({ message: failureMessage(result.reason, result.blockedBy, game) })
+    else set({ game: result.state ?? game, message: failureMessage(result.reason, result.blockedBy, game, selectedTrainId) })
   },
 
   setTimeScale: (timeScale) => set({ timeScale }),

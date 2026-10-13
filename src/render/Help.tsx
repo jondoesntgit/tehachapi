@@ -69,7 +69,8 @@ export function Help({ onClose }: { onClose: () => void }) {
             </dl>
             <p className="hint">
               Trains cannot reverse. A route takes a siding by itself when the main is held, and is refused if
-              another train is in the way or the train cannot stop in time.
+              another train is in the way or the train cannot stop in time. Sending a train where it could
+              only leave by the wrong terminal is refused, and moves its due time 3 minutes earlier.
             </p>
           </section>
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
-import { findSteps, requestRoute, STOP_CLEARANCE_M } from '../src/engine/routing'
+import { canReach, findSteps, requestRoute, STOP_CLEARANCE_M, WRONG_DESTINATION_PENALTY_S } from '../src/engine/routing'
 import { createInitialState, step } from '../src/engine/simulation'
 import { buildGraph } from '../src/engine/trackGraph'
 import type { GameState } from '../src/engine/types'
@@ -106,5 +106,28 @@ describe('requestRoute', () => {
       reason: 'blocked',
       blockedBy: 'T2',
     })
+  })
+})
+
+describe('wrong destination', () => {
+  it('refuses a route from which the train could only leave by another terminal, and docks 3 minutes', () => {
+    // T1 is eastbound but bound for WEST: nothing ahead of it leads there.
+    const westBound = buildGraph({
+      ...level,
+      startingTrains: [],
+      schedule: level.schedule.map((e) => (e.id === 'T1' ? { ...e, destination: 'WEST' } : e)),
+    })
+    const state = step(westBound, { ...createInitialState(westBound), timeS: parseClock('10:32') - 0.1 }, 0.1)
+    const result = requestRoute(westBound, state, 'T1', { edgeId: 'M3', offsetM: 100 })
+    expect(result).toMatchObject({ ok: false, reason: 'wrong-destination' })
+    const before = state.trains.find((t) => t.id === 'T1')!
+    const after = !result.ok && result.state!.trains.find((t) => t.id === 'T1')!
+    expect(after).toEqual({ ...before, dueAtS: before.dueAtS - WRONG_DESTINATION_PENALTY_S })
+  })
+
+  it('knows which terminals a step can still reach', () => {
+    expect(canReach(graph, { edgeId: 'M1', direction: 1 }, 'EAST')).toBe(true)
+    expect(canReach(graph, { edgeId: 'M1', direction: 1 }, 'WEST')).toBe(false)
+    expect(canReach(graph, { edgeId: 'M3', direction: -1 }, 'WEST')).toBe(true)
   })
 })

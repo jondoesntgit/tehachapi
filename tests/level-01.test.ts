@@ -9,7 +9,7 @@ import { graph1 as graph, level1 as level, route, runUntil } from './helpers'
 
 const EAST_EXIT = { edgeId: 'M9', offsetM: 700 }
 const WEST_EXIT = { edgeId: 'M1', offsetM: 0 }
-const SOUTH_EXIT = { edgeId: 'SPUR_S', offsetM: getEdge(graph, 'SPUR_S').lengthM }
+const SOUTHEAST_EXIT = { edgeId: 'SE_LINE', offsetM: getEdge(graph, 'SE_LINE').lengthM }
 const SIDINGS = ['SIDING_A', 'SIDING_B', 'SIDING_C', 'SIDING_D']
 
 const has = (id: string) => (s: GameState) => s.trains.some((t) => t.id === id)
@@ -31,49 +31,66 @@ describe('level 1', () => {
     expect(level.startingTrains).toHaveLength(3)
   })
 
-  it('brings a train up from South and lets it head west', () => {
+  it('brings a train up from Southeast and lets it head west', () => {
     const t13 = level.schedule.find((e) => e.id === 'T13')!
-    expect([t13.entry, t13.destination]).toEqual(['SOUTH', 'WEST'])
+    expect([t13.entry, t13.destination]).toEqual(['SOUTHEAST', 'WEST'])
     // T13 alone on the board.
     const alone = buildGraph({ ...level, schedule: [t13], startingTrains: [] })
     const at = runUntil(alone, createInitialState(alone), (s) => s.trains.some((t) => t.id === 'T13'))
     const routed = route(alone, at, 'T13', WEST_EXIT)
     expect(routed.trains.find((t) => t.id === 'T13')!.path.map((s) => s.edgeId).slice(0, 3)).toEqual([
-      'SPUR_S', 'SPUR_W', 'M5',
+      'SE_LINE', 'SPUR_W', 'M5',
     ])
   })
 
-  it('has a South wye off the main between sidings B and C, open to trains from either side', () => {
-    expect(graph.nodes.get('SOUTH')).toMatchObject({ kind: 'terminal', label: 'South' })
+  it('has a wye off the main between sidings B and C, open to trains from either side', () => {
+    expect(graph.nodes.get('SOUTHEAST')).toMatchObject({ kind: 'terminal', label: 'Southeast' })
     const ids = (steps: { edgeId: string }[]) => steps.map((s) => s.edgeId).sort()
     // Eastbound trains can turn down the west leg, westbound ones down the east leg.
     expect(ids(nextSteps(graph, { edgeId: 'M5', direction: 1 }))).toEqual(['M5M', 'SPUR_W'])
     expect(ids(nextSteps(graph, { edgeId: 'M5E', direction: -1 }))).toEqual(['M5M', 'SPUR_E'])
     // Coming up from South, a train can head either way.
-    expect(ids(nextSteps(graph, { edgeId: 'SPUR_S', direction: -1 }))).toEqual(['SPUR_E', 'SPUR_W'])
+    expect(ids(nextSteps(graph, { edgeId: 'SE_LINE', direction: -1 }))).toEqual(['SPUR_E', 'SPUR_W'])
     expect(ids(nextSteps(graph, { edgeId: 'SPUR_E', direction: -1 }))).toEqual(['M5E'])
     expect(ids(nextSteps(graph, { edgeId: 'SPUR_W', direction: -1 }))).toEqual(['M5'])
   })
 
-  it('brings a train up from South and lets it head east', () => {
+  it('brings a train up from Southeast and lets it head east', () => {
     const t12 = level.schedule.find((e) => e.id === 'T12')!
-    expect([t12.entry, t12.destination]).toEqual(['SOUTH', 'EAST'])
+    expect([t12.entry, t12.destination]).toEqual(['SOUTHEAST', 'EAST'])
     let state = runUntil(graph, createInitialState(graph), has('T12'))
-    expect(state.trains.find((t) => t.id === 'T12')!.path[0]).toEqual({ edgeId: 'SPUR_S', direction: -1 })
+    expect(state.trains.find((t) => t.id === 'T12')!.path[0]).toEqual({ edgeId: 'SE_LINE', direction: -1 })
     // Nobody has dispatched T2, which holds the east entry, so stop T12 short of it.
     state = routeWhenClear(state, 'T12', { edgeId: 'M7', offsetM: 600 })
     expect(state.trains.find((t) => t.id === 'T12')!.path.map((s) => s.edgeId).slice(0, 3)).toEqual([
-      'SPUR_S', 'SPUR_E', 'M5E',
+      'SE_LINE', 'SPUR_E', 'M5E',
     ])
   })
 
-  it('lets an eastbound train leave through South, scored as the wrong exit', () => {
-    let state = runUntil(graph, createInitialState(graph), has('T1'))
-    state = routeWhenClear(state, 'T1', SOUTH_EXIT)
-    state = runUntil(graph, state, (s) => s.results.some((r) => r.trainId === 'T1'))
-    expect(state.results.find((r) => r.trainId === 'T1')).toMatchObject({ exitedAt: 'SOUTH', reachedDestination: false })
+  it('runs the Southeast line under the main, parallel to it, out to the east end', () => {
+    const line = getEdge(graph, 'SE_LINE')
+    const run = line.polyline.slice(2)
+    expect(run.every((p) => p.y === run[0].y && p.y > 60)).toBe(true)
+    expect(run[run.length - 1].x).toBe(graph.nodes.get('EAST')!.x)
+    // It leaves the wye straight down, so trains on either leg can take it.
+    expect(line.polyline[1].x).toBe(line.polyline[0].x)
   })
 
+  it('refuses to send a train toward the wrong terminal and moves its due time 3 minutes earlier', () => {
+    let state = runUntil(graph, createInitialState(graph), has('T1'))
+    const dueAtS = state.trains.find((t) => t.id === 'T1')!.dueAtS
+    const reservations = state.reservations
+    const result = requestRoute(graph, state, 'T1', SOUTHEAST_EXIT)
+    expect(result).toMatchObject({ ok: false, reason: 'wrong-destination' })
+    state = result.state!
+    expect(state.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(dueAtS - 3 * 60)
+    expect(state.reservations).toBe(reservations)
+
+    // A stop partway down the Southeast line is a dead end for T1 too.
+    const again = requestRoute(graph, state, 'T1', { edgeId: 'SE_LINE', offsetM: 1500 })
+    expect(again).toMatchObject({ ok: false, reason: 'wrong-destination' })
+    expect(again.ok || again.state!.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(dueAtS - 6 * 60)
+  })
   it('keeps the written timetable without a seed', () => {
     const timetable = buildTimetable(graph)
     for (const entry of level.schedule) {
@@ -112,10 +129,10 @@ describe('level 1', () => {
     expect(seen.T11.size).toBeGreaterThan(50)
   })
 
-  it('sends two trains, entering from the west, to South', () => {
-    const south = level.schedule.filter((e) => e.destination === 'SOUTH')
+  it('sends two trains, entering from the west, to Southeast', () => {
+    const south = level.schedule.filter((e) => e.destination === 'SOUTHEAST')
     expect(south.map((e) => [e.id, e.entry])).toEqual([['T10', 'WEST'], ['T11', 'WEST']])
-    expect(graph.nodes.get('SOUTH')?.color).toBeDefined()
+    expect(graph.nodes.get('SOUTHEAST')?.color).toBeDefined()
   })
 
   it('puts L1 on siding A and L2, L3 on different random sidings among B, C and D', () => {
@@ -184,7 +201,7 @@ describe('level 1', () => {
 
     // T10 enters behind T2 and turns off down the South spur.
     state = runUntil(graph, state, has('T10'))
-    state = routeWhenClear(state, 'T10', SOUTH_EXIT)
+    state = routeWhenClear(state, 'T10', SOUTHEAST_EXIT)
 
     // T12 comes up from South once T10 is down, and turns east up the wye's east leg.
     state = runUntil(graph, state, has('T12'))
@@ -209,7 +226,7 @@ describe('level 1', () => {
 
     // T11 waits off the map until T9 is home, then runs down to South.
     state = runUntil(graph, state, has('T11'))
-    state = routeWhenClear(state, 'T11', SOUTH_EXIT)
+    state = routeWhenClear(state, 'T11', SOUTHEAST_EXIT)
 
     // T13 comes up from South once T11 is down, and turns west up the wye's west leg.
     state = runUntil(graph, state, has('T13'))

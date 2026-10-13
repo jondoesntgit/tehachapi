@@ -25,10 +25,30 @@ export type RouteFailure =
   | 'too-close'
   /** The train is already leaving through a terminal. */
   | 'departing'
+  /** From the target the train could only leave through a terminal other than its destination. */
+  | 'wrong-destination'
 
 export type RouteResult =
   | { ok: true; state: GameState }
-  | { ok: false; reason: RouteFailure; blockedBy?: string }
+  /** `state` is set when the refusal itself changes the game (a wrong-destination penalty). */
+  | { ok: false; reason: RouteFailure; blockedBy?: string; state?: GameState }
+
+/** Asking to send a train where it can't reach its destination moves its due time this much earlier. */
+export const WRONG_DESTINATION_PENALTY_S = 3 * 60
+
+/** Whether a train following `step` can still reach `terminalId` without reversing. */
+export function canReach(graph: TrackGraph, step: RouteStep, terminalId: string): boolean {
+  const seen = new Set<string>()
+  const queue = [step]
+  while (queue.length > 0) {
+    const current = queue.pop()!
+    if (seen.has(stepKey(current))) continue
+    seen.add(stepKey(current))
+    if (stepEndNode(getEdge(graph, current.edgeId), current.direction) === terminalId) return true
+    queue.push(...nextSteps(graph, current))
+  }
+  return false
+}
 
 const stepKey = (step: RouteStep) => `${step.edgeId}:${step.direction}`
 
@@ -110,17 +130,32 @@ export function requestRoute(
     Object.keys(state.reservations).filter((edgeId) => state.reservations[edgeId] !== trainId),
   )
 
+  // Never send a train somewhere it could only leave by the wrong terminal; the attempt costs time.
+  const wrongDestination = (lastStep: RouteStep): RouteResult | null => {
+    if (canReach(graph, lastStep, train.destination)) return null
+    const penalized: Train = { ...train, dueAtS: train.dueAtS - WRONG_DESTINATION_PENALTY_S }
+    return {
+      ok: false,
+      reason: 'wrong-destination',
+      state: { ...state, trains: state.trains.map((t) => (t.id === trainId ? penalized : t)) },
+    }
+  }
+
   let steps: RouteStep[] = []
   const onHeadEdge = target.edgeId === headStep.edgeId ? resolveStop(graph, headStep, target.offsetM) : null
   if (!onHeadEdge || onHeadEdge.alongM <= head.alongM) {
     const found = findSteps(graph, headStep, target, heldByOthers)
     if (!found) {
       const unobstructed = findSteps(graph, headStep, target, new Set())
+      const refused = unobstructed && wrongDestination(unobstructed[unobstructed.length - 1])
+      if (refused) return refused
       const blockedEdge = unobstructed?.find((step) => heldByOthers.has(step.edgeId))
       return blockedEdge
         ? { ok: false, reason: 'blocked', blockedBy: state.reservations[blockedEdge.edgeId] }
         : { ok: false, reason: 'no-path' }
     }
+    const refused = wrongDestination(found[found.length - 1])
+    if (refused) return refused
     steps = found
   }
 

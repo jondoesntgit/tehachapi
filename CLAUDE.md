@@ -103,7 +103,8 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
   - On success, every edge in the train's path is reserved by it (`GameState.reservations`). Reserved edges render green.
   - Stop targets are kept `STOP_CLEARANCE_M` (20 m) from either end of an edge, so a stopped train never fouls a switch.
   - A target at a terminal's end of the line becomes an exit.
-  - Refusals: `no-path`, `blocked` (names the train in the way), `too-close` (cannot brake in time), `departing`.
+  - Refusals: `no-path`, `blocked` (names the train in the way), `too-close` (cannot brake in time), `departing`, `wrong-destination`.
+  - `wrong-destination`: from the target, the train could only leave by a terminal other than its destination (`canReach`). The refusal carries a new `state` in which the train's due time is `WRONG_DESTINATION_PENALTY_S` (3 min) earlier; the store applies it.
 - **Releasing:** in `step`, an edge is dropped from `path` and its reservation released once the tail clears it.
 - **Physics, per train each step** (`advance`):
   - `brakingDistance = v² / (2 · decel)`.
@@ -113,7 +114,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Timetable:** `createInitialState(graph, seed)` builds `GameState.timetable` (`buildTimetable`): a scheduled train with `appearsBetween` appears at a random whole minute in that window; any other moves by a random whole number of minutes, up to the level's `appearsJitterMin` either way. The due time moves with the appearance. The store passes a fresh random seed each game; with no seed (tests) the timetable is as written. The engine only ever reads times from `state.timetable`.
 - **Spawning:** at its timetabled appearance, a train's head enters at its terminal's portal with the body still off the map. It is routed to the far end of its entry edge and stops there until the player sends it on. If the entry edge is reserved, the train stays pending and the HUD warns.
 - **Starting trains:** a level's `startingTrains` are already on the board at the start, stopped on their edge with the head `STOP_CLEARANCE_M` short of the far end (`placeStartingTrains`). With a seed, a train with `edgeChoices` stands on a random one of them that no earlier starting train has taken (its own random stream, so it doesn't change the timetable draws). The whole train must fit on that edge clear of both switches.
-- **Leaving and scoring:** arrival time is when the head reaches the exit terminal; the train is removed when its tail clears. A `TrainResult` records minutes late (0 = on time) and whether it left through its scheduled destination.
+- **Leaving and scoring:** arrival time is when the head reaches the exit terminal; the train is removed when its tail clears. A `TrainResult` records minutes late (0 = on time) and whether it left through its scheduled destination (routing makes a wrong exit impossible, so this is always true in play).
 - **No fail state yet.** Reservations and the exact stop make collisions and overruns impossible. Two trains routed nose to nose on single track simply deadlock, undetected.
 - **Fast-forward:** the store drops back to 1× whenever a train enters. "Skip to next train" only works while the board is empty.
 
@@ -147,7 +148,7 @@ Done:
 3. Render track + trains in SVG, fit to screen.
 4. Tap-to-route with reservations (green).
 5. Clock, HUD, scheduler from JSON, fast-forward.
-6. Level 1: four sidings, a South wye, sixteen trains (two bound for South, two entering from it; three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring, randomized entry times, trains colored by destination.
+6. Level 1: four sidings, a wye to a Southeast line running under the main, sixteen trains (two bound for Southeast, two entering from it; three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring, randomized entry times, trains colored by destination.
 
 Next:
 7. Deadlock detection and a level-failed state; end-of-level score summary.

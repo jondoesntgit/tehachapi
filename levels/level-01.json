@@ -14,7 +14,7 @@
     { "id": "SW_SW", "x": 2800, "y": 0, "kind": "switch" },
     { "id": "SW_SE", "x": 3200, "y": 0, "kind": "switch" },
     { "id": "SW_SJ", "x": 3000, "y": 100, "kind": "switch" },
-    { "id": "SOUTH", "x": 3000, "y": 250, "kind": "terminal", "label": "South", "color": "#ffdc3c" },
+    { "id": "SOUTHEAST", "x": 6000, "y": 180, "kind": "terminal", "label": "Southeast", "color": "#ffdc3c" },
     { "id": "SW_C1", "x": 3400, "y": 0, "kind": "switch" },
     { "id": "SW_C2", "x": 4000, "y": 0, "kind": "switch" },
     { "id": "SW_D1", "x": 4700, "y": 0, "kind": "switch" },
@@ -39,7 +39,7 @@
     { "id": "SIDING_D", "from": "SW_D1", "to": "SW_D2", "points": [[4800, 60], [5200, 60]] },
     { "id": "SPUR_W", "from": "SW_SW", "to": "SW_SJ", "points": [[2900, 30]] },
     { "id": "SPUR_E", "from": "SW_SE", "to": "SW_SJ", "points": [[3100, 30]] },
-    { "id": "SPUR_S", "from": "SW_SJ", "to": "SOUTH" }
+    { "id": "SE_LINE", "from": "SW_SJ", "to": "SOUTHEAST", "points": [[3000, 160], [3060, 180]] }
   ],
   "startingTrains": [
     {
@@ -105,23 +105,23 @@
       "maxSpeedMps": 12, "destination": "WEST", "dueAt": "11:45"
     },
     {
-      "id": "T10", "name": "Southbound Freight 110",
+      "id": "T10", "name": "Southeast Freight 110",
       "appearsAt": "10:20", "appearsBetween": ["10:00", "11:00"], "entry": "WEST",
-      "maxSpeedMps": 15, "destination": "SOUTH", "dueAt": "10:38"
+      "maxSpeedMps": 15, "destination": "SOUTHEAST", "dueAt": "10:38"
     },
     {
-      "id": "T11", "name": "Southbound Local 111",
+      "id": "T11", "name": "Southeast Local 111",
       "appearsAt": "11:26", "appearsBetween": ["10:30", "11:30"], "entry": "WEST",
-      "maxSpeedMps": 12, "destination": "SOUTH", "dueAt": "11:50"
+      "maxSpeedMps": 12, "destination": "SOUTHEAST", "dueAt": "11:50"
     },
     {
       "id": "T12", "name": "Eastbound Freight 112",
-      "appearsAt": "10:35", "appearsBetween": ["10:30", "11:15"], "entry": "SOUTH",
+      "appearsAt": "10:35", "appearsBetween": ["10:30", "11:15"], "entry": "SOUTHEAST",
       "maxSpeedMps": 15, "destination": "EAST", "dueAt": "10:55"
     },
     {
       "id": "T13", "name": "Westbound Freight 113",
-      "appearsAt": "11:40", "appearsBetween": ["10:45", "11:40"], "entry": "SOUTH",
+      "appearsAt": "11:40", "appearsBetween": ["10:45", "11:40"], "entry": "SOUTHEAST",
       "maxSpeedMps": 15, "destination": "WEST", "dueAt": "12:00"
     }
   ]
