@@ -27,8 +27,20 @@ describe('level 1', () => {
       expect(lengthM).toBeGreaterThanOrEqual(level.trainLengthM + 40)
       expect(lengthM).toBeLessThan(700)
     }
-    expect(level.schedule).toHaveLength(12)
+    expect(level.schedule).toHaveLength(13)
     expect(level.startingTrains).toHaveLength(3)
+  })
+
+  it('brings a train up from South and lets it head west', () => {
+    const t13 = level.schedule.find((e) => e.id === 'T13')!
+    expect([t13.entry, t13.destination]).toEqual(['SOUTH', 'WEST'])
+    // T13 alone on the board.
+    const alone = buildGraph({ ...level, schedule: [t13], startingTrains: [] })
+    const at = runUntil(alone, createInitialState(alone), (s) => s.trains.some((t) => t.id === 'T13'))
+    const routed = route(alone, at, 'T13', WEST_EXIT)
+    expect(routed.trains.find((t) => t.id === 'T13')!.path.map((s) => s.edgeId).slice(0, 3)).toEqual([
+      'SPUR_S', 'SPUR_W', 'M5',
+    ])
   })
 
   it('has a South wye off the main between sidings B and C, open to trains from either side', () => {
@@ -75,6 +87,7 @@ describe('level 1', () => {
       T1: ['10:00', '10:25'], T2: ['10:00', '10:25'], T3: ['10:00', '10:25'],
       T7: ['10:30', '11:30'], T8: ['10:30', '11:30'], T9: ['10:30', '11:30'],
       T10: ['10:00', '11:00'], T11: ['10:30', '11:30'], T12: ['10:30', '11:15'],
+      T13: ['10:45', '11:40'],
     }
     const seen: Record<string, Set<number>> = {}
     for (let seed = 0; seed < 200; seed++) {
@@ -197,10 +210,14 @@ describe('level 1', () => {
     // T11 waits off the map until T9 is home, then runs down to South.
     state = runUntil(graph, state, has('T11'))
     state = routeWhenClear(state, 'T11', SOUTH_EXIT)
+
+    // T13 comes up from South once T11 is down, and turns west up the wye's west leg.
+    state = runUntil(graph, state, has('T13'))
+    state = routeWhenClear(state, 'T13', WEST_EXIT)
     state = runUntil(graph, state, isLevelComplete)
 
     expect(state.results.map((r) => r.trainId).sort()).toEqual([
-      'L1', 'L2', 'L3', 'T1', 'T10', 'T11', 'T12', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
+      'L1', 'L2', 'L3', 'T1', 'T10', 'T11', 'T12', 'T13', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
     ])
     expect(state.results.every((r) => r.reachedDestination)).toBe(true)
     expect(state.results.filter((r) => r.lateMinutes > 0)).toEqual([])

@@ -118,6 +118,11 @@
       "id": "T12", "name": "Eastbound Freight 112",
       "appearsAt": "10:35", "appearsBetween": ["10:30", "11:15"], "entry": "SOUTH",
       "maxSpeedMps": 15, "destination": "EAST", "dueAt": "10:55"
+    },
+    {
+      "id": "T13", "name": "Westbound Freight 113",
+      "appearsAt": "11:40", "appearsBetween": ["10:45", "11:40"], "entry": "SOUTH",
+      "maxSpeedMps": 15, "destination": "WEST", "dueAt": "12:00"
     }
   ]
 }
