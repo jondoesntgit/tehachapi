@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
-import { heldAtPortal, isLevelComplete, levelScore } from '../src/engine/scheduler'
-import { requestRoute } from '../src/engine/routing'
+import { heldAtPortal, isLevelComplete, lateTotal, levelScore } from '../src/engine/scheduler'
+import { isDeadlocked, requestRoute } from '../src/engine/routing'
 import { createInitialState, skipToNextArrival, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, type TrackGraph } from '../src/engine/trackGraph'
 import type { GameState } from '../src/engine/types'
@@ -208,11 +208,73 @@ describe('work trains', () => {
 })
 
 describe('levelScore', () => {
+  const result = (lateMinutes: number) => ({
+    trainId: 'X', name: 'X', arrivedAtS: 0, dueAtS: 0, lateMinutes, exitedAt: 'EAST', reachedDestination: true,
+  })
+
   it('is 100 less every minute trains were late', () => {
-    const result = (lateMinutes: number) => ({
-      trainId: 'X', name: 'X', arrivedAtS: 0, dueAtS: 0, lateMinutes, exitedAt: 'EAST', reachedDestination: true,
-    })
-    expect(levelScore([])).toBe(100)
-    expect(levelScore([result(0), result(4), result(7)])).toBe(89)
+    expect(levelScore({ results: [], deadlocked: false })).toBe(100)
+    expect(levelScore({ results: [result(0), result(4), result(7)], deadlocked: false })).toBe(89)
+  })
+
+  it('adds 90 minutes to the late total for a deadlock', () => {
+    expect(lateTotal({ results: [result(4)], deadlocked: true })).toBe(94)
+    expect(levelScore({ results: [result(4)], deadlocked: true })).toBe(6)
+  })
+})
+
+describe('deadlock', () => {
+  // Plain single track, three blocks: two trains meeting head on can't pass.
+  const single = buildGraph({
+    ...level,
+    trainLengthM: 400,
+    startingTrains: [],
+    nodes: [
+      { id: 'WEST', x: 0, y: 0, kind: 'terminal' },
+      { id: 'A', x: 1000, y: 0, kind: 'switch' },
+      { id: 'B', x: 2000, y: 0, kind: 'switch' },
+      { id: 'EAST', x: 3000, y: 0, kind: 'terminal' },
+    ],
+    edges: [
+      { id: 'M1', from: 'WEST', to: 'A' },
+      { id: 'M2', from: 'A', to: 'B' },
+      { id: 'M3', from: 'B', to: 'EAST' },
+    ],
+    schedule: [
+      { id: 'T1', name: 'East', appearsAt: '10:00', entry: 'WEST', maxSpeedMps: 15, destination: 'EAST', dueAt: '10:20' },
+      { id: 'T2', name: 'West', appearsAt: '10:01', entry: 'EAST', maxSpeedMps: 15, destination: 'WEST', dueAt: '10:20' },
+    ],
+  })
+  const has = (id: string) => (s: GameState) => s.trains.some((t) => t.id === id)
+  const allStopped = (s: GameState) => s.trains.length === 2 && s.trains.every((t) => t.speedMps === 0)
+
+  it('ends the game when every train is launched and they block each other for good', () => {
+    let state = runUntil(single, createInitialState(single), has('T1'))
+    state = route(single, state, 'T1', { edgeId: 'M2', offsetM: 500 })
+    state = runUntil(single, state, (s) => has('T2')(s) && allStopped(s) || s.deadlocked)
+    expect(state.deadlocked).toBe(true)
+    expect(isLevelComplete(state)).toBe(true)
+    expect(levelScore(state)).toBe(100 - 90)
+    // The game stands still from here.
+    expect(step(single, state, 0.1)).toBe(state)
+  })
+
+  it('does not call it a deadlock while a train still has a way forward', () => {
+    let state = runUntil(single, createInitialState(single), has('T2'))
+    state = runUntil(single, state, allStopped)
+    // T1 and T2 face each other across the empty M2: either could move into it.
+    expect(isDeadlocked(single, state)).toBe(false)
+    expect(state.deadlocked).toBe(false)
+  })
+
+  it('waits until every train has been launched', () => {
+    const later = buildGraph({ ...single.level, schedule: [...single.level.schedule, { ...single.level.schedule[0], id: 'T3', appearsAt: '11:00', dueAt: '11:20' }] })
+    let state = runUntil(later, createInitialState(later), has('T1'))
+    state = route(later, state, 'T1', { edgeId: 'M2', offsetM: 500 })
+    state = runUntil(later, state, (s) => has('T2')(s) && allStopped(s))
+    expect(state.deadlocked).toBe(false)
+    // T3 enters at 11:00 and stops behind T1; with every train launched, that's a deadlock.
+    state = runUntil(later, state, (s) => s.deadlocked)
+    expect(state.timeS).toBeGreaterThanOrEqual(parseClock('11:00'))
   })
 })

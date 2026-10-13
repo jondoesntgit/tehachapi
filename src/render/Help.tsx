@@ -77,7 +77,8 @@ export function Help({ onClose }: { onClose: () => void }) {
               another train is in the way or the train cannot stop in time. Sending a train where it could
               only leave by the wrong terminal is refused, and moves its due time 3 minutes earlier.
               When nothing is due for 5 minutes, a work train (W) runs through by itself at half speed. Your
-              score at the end is 100, less every minute trains were late.
+              score at the end is 100, less every minute trains were late. If every train has entered and the ones on the board block each other with
+              no way forward, the game ends and 90 minutes are added to the late total.
             </p>
           </section>
 

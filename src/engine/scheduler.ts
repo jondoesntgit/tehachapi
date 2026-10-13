@@ -196,9 +196,17 @@ export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
   return { ...state, trains: [...state.trains, train], reservations, workTrainsSent: state.workTrainsSent + 1 }
 }
 
-/** 100, less every minute any train was late. */
-export function levelScore(results: readonly TrainResult[]): number {
-  return 100 - results.reduce((sum, r) => sum + r.lateMinutes, 0)
+/** Minutes added to the late total when the game ends in a deadlock. */
+export const DEADLOCK_PENALTY_MIN = 90
+
+/** Every minute trains were late, plus `DEADLOCK_PENALTY_MIN` if the game ended in a deadlock. */
+export function lateTotal(state: Pick<GameState, 'results' | 'deadlocked'>): number {
+  return state.results.reduce((sum, r) => sum + r.lateMinutes, 0) + (state.deadlocked ? DEADLOCK_PENALTY_MIN : 0)
+}
+
+/** 100, less the late total. */
+export function levelScore(state: Pick<GameState, 'results' | 'deadlocked'>): number {
+  return 100 - lateTotal(state)
 }
 
 export function scoreArrival(train: Train, arrivedAtS: number, exitedAt: string): TrainResult {
@@ -213,6 +221,7 @@ export function scoreArrival(train: Train, arrivedAtS: number, exitedAt: string)
   }
 }
 
+/** The game is over: every train is through, or the board deadlocked. */
 export function isLevelComplete(state: GameState): boolean {
-  return state.pending.length === 0 && state.trains.length === 0
+  return state.deadlocked || (state.pending.length === 0 && state.trains.length === 0)
 }

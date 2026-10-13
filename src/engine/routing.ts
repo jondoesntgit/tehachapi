@@ -237,3 +237,27 @@ export function requestRoute(
     state: { ...state, reservations, trains: state.trains.map((t) => (t.id === trainId ? routed : t)) },
   }
 }
+
+/**
+ * Whether `train` has any way forward: a block ahead of its head that holds it, still leads to its
+ * destination, and isn't held by another train. Its own block doesn't count, even if it has room.
+ */
+export function canProgress(graph: TrackGraph, state: GameState, train: Train): boolean {
+  if (train.stopAtM === null) return true
+  const headStep = train.path[locateStep(graph, train.path, train.headM).index]
+  const heldByOthers = new Set(Object.keys(state.reservations).filter((id) => state.reservations[id] !== train.id))
+  return nextSteps(graph, headStep).some(
+    (step) => !heldByOthers.has(step.edgeId) && roomAhead(graph, step, train.destination, heldByOthers) !== null,
+  )
+}
+
+/**
+ * Deadlock: every scheduled train has been launched (its entry time has passed, even if it is still
+ * held at its portal), and the trains on the board are all stopped with no way forward.
+ */
+export function isDeadlocked(graph: TrackGraph, state: GameState): boolean {
+  const allLaunched = state.pending.every((id) => state.timetable[id].appearsAtS <= state.timeS)
+  if (!allLaunched || state.trains.length === 0) return false
+  if (state.trains.some((t) => t.speedMps > 0 || t.stopAtM === null)) return false
+  return !state.trains.some((t) => canProgress(graph, state, t))
+}

@@ -172,5 +172,7 @@ export interface GameState {
   seed: number
   /** Work trains sent so far. */
   workTrainsSent: number
+  /** Every train was launched and the ones on the board blocked each other for good; the game is over. */
+  deadlocked: boolean
   results: TrainResult[]
 }

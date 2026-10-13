@@ -15,7 +15,6 @@ Working today:
 - CI and GitHub Pages deploy.
 
 Not built yet (see Roadmap):
-- Deadlock detection and any level-failed state.
 - Pan/zoom; the map only fits to the screen.
 - PWA install, Capacitor builds.
 - More than one level; level selection.
@@ -119,8 +118,8 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Starting trains:** a level's `startingTrains` are already on the board at the start, stopped on their edge with the head `STOP_CLEARANCE_M` short of the far end (`placeStartingTrains`). With a seed, a train with `edgeChoices` stands on a random one of them that no earlier starting train has taken (its own random stream, so it doesn't change the timetable draws). The whole train must fit on that edge clear of both switches.
 - **Leaving and scoring:** arrival time is when the head reaches the exit terminal; the train is removed when its tail clears. A `TrainResult` records minutes late (0 = on time) and whether it left through its scheduled destination (routing makes a wrong exit impossible, so this is always true in play).
 - **Work trains** (`spawnWorkTrain`, levels with `workTrains: true`): when the board is empty, trains are still pending and none is due for `WORK_TRAIN_CLEAR_S` (5 min), a train `W` enters at a random terminal and runs a random route (`randomRoute`, drawn from `state.seed` and `workTrainsSent`) out through another, at half line speed (half the fastest scheduled top speed). It holds its whole route, can't be dispatched, isn't scored, doesn't end fast-forward, and "Skip to next train" clears it away.
-- **Score:** `levelScore` = 100 less the total minutes late; the level-complete panel shows it.
-- **No fail state yet.** Reservations and the exact stop make collisions and overruns impossible. Two trains routed nose to nose on single track simply deadlock, undetected.
+- **Score:** `levelScore` = 100 less `lateTotal` (minutes late, plus 90 for a deadlock); the end-of-game panel shows it.
+- **Deadlock ends the game** (`isDeadlocked`, checked at the end of every `step`): once every scheduled train's entry time has passed (held-at-portal counts as launched), and every train on the board is stopped with no way forward (`canProgress`: no free block ahead with room that still leads to its destination), `state.deadlocked` is set. `step` then returns the state unchanged, `isLevelComplete` is true, and `DEADLOCK_PENALTY_MIN` (90) is added to the late total (`lateTotal`, `levelScore`). Reservations and the exact stop still make collisions and overruns impossible.
 - **Fast-forward:** the store drops back to 1× whenever a train enters. "Skip to next train" only works while no dispatched train is on the board.
 
 ## Level file format (`levels/*.json`)
@@ -158,7 +157,7 @@ Done:
 6. Level 1: four sidings, a wye to an SE line running under the main (three blocks, a passing siding, tinted, labelled), sixteen trains (two bound for Southeast, two entering from it; three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring out of 100, work trains in timetable gaps, randomized entry times, trains colored by destination.
 
 Next:
-7. Deadlock detection and a level-failed state; end-of-level score summary.
+7. Per-train end-of-level score breakdown (deadlock detection and the score are done).
 8. Pan/zoom for layouts larger than the screen.
 9. More levels and a level picker.
 10. PWA install on iPhone (needs HTTPS on the Pages domain).

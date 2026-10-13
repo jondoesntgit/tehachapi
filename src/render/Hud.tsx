@@ -1,6 +1,14 @@
 import { useEffect } from 'react'
 import { formatClock } from '../engine/clock'
-import { getScheduleEntry, heldAtPortal, isLevelComplete, levelScore, nextArrivalS } from '../engine/scheduler'
+import {
+  DEADLOCK_PENALTY_MIN,
+  getScheduleEntry,
+  heldAtPortal,
+  isLevelComplete,
+  lateTotal,
+  levelScore,
+  nextArrivalS,
+} from '../engine/scheduler'
 import { TIME_SCALES, useGameStore } from '../store'
 import { Help } from './Help'
 import { destinationColor, WORK_TRAIN_COLOR } from './view'
@@ -59,11 +67,14 @@ export function Hud() {
 
       {complete && (
         <div className="hud summary">
-          <h2>Level complete</h2>
+          <h2>{game.deadlocked ? 'Deadlock — trains blocked each other' : 'Level complete'}</h2>
           <p className="score">
-            Your score is <b>{levelScore(game.results)}</b>
+            Your score is <b>{levelScore(game)}</b>
           </p>
-          <p className="hint">100, less {game.results.reduce((sum, r) => sum + r.lateMinutes, 0)} minutes late in all</p>
+          <p className="hint">
+            100, less {lateTotal(game)} minutes late in all
+            {game.deadlocked && ` (including ${DEADLOCK_PENALTY_MIN} for the deadlock)`}
+          </p>
           <button onClick={restart}>Play again</button>
         </div>
       )}
