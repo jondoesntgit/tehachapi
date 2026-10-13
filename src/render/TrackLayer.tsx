@@ -1,4 +1,5 @@
 import { getEdge, pathLength, pathPolyline, type TrackGraph } from '../engine/trackGraph'
+import type { CSSProperties } from 'react'
 import type { LevelNode, Vec2 } from '../engine/types'
 import { useGameStore } from '../store'
 import { LABEL_SIZE, pointsAttr, PX_PER_MM, toView, trimEnd, viewPointsAttr } from './view'
@@ -25,13 +26,20 @@ function outward(graph: TrackGraph, node: LevelNode): Vec2 {
 export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
   const graph = useGameStore((s) => s.graph)
   const trains = useGameStore((s) => s.game.trains)
+  const entryCounts = useGameStore((s) => s.entryCounts)
+  const branchOf = new Map(graph.level.edges.map((e) => [e.id, e.branch]))
   // Each end gives up half the gap. Both routes' round caps reach back into it, so add one cap each.
   const trimV = ((ROUTE_GAP_MM * PX_PER_MM) / 2 + RESERVED_STROKE_PX / 2) * unitsPerPx
 
   return (
     <g>
       {[...graph.edges.values()].map((edge) => (
-        <polyline key={edge.id} className="track" points={pointsAttr(edge.polyline)} />
+        <polyline
+          key={edge.id}
+          className={branchOf.get(edge.id) ? 'track track-branch' : 'track'}
+          style={{ '--branch-color': graph.nodes.get(branchOf.get(edge.id) ?? '')?.color } as CSSProperties}
+          points={pointsAttr(edge.polyline)}
+        />
       ))}
       {trains.map((train) => {
         // A train reserves exactly the edges of its path, so its route is the whole path.
@@ -47,7 +55,7 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
       {[...graph.nodes.values()].map((node) => {
         const p = toView(node)
         if (node.kind !== 'terminal') {
-          return node.kind === 'switch' ? <circle key={node.id} className="switch" cx={p.x} cy={p.y} r={22} /> : null
+          return node.kind === 'switch' ? <circle key={node.id} className="switch" cx={p.x} cy={p.y} r={30} /> : null
         }
         // The bar crosses the track. The label sits under the bar, or past the end of a track that runs down.
         const out = outward(graph, node)
@@ -56,7 +64,9 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
         return (
           <g key={node.id}>
             <line
-              className="portal"
+              // A new key each time a train enters here restarts the pulse animation.
+              key={entryCounts[node.id] ?? 0}
+              className={entryCounts[node.id] ? 'portal portal-entered' : 'portal'}
               x1={p.x - out.y * PORTAL_HALF}
               y1={p.y + out.x * PORTAL_HALF}
               x2={p.x + out.y * PORTAL_HALF}
@@ -66,6 +76,14 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
               {node.label ?? node.id}
             </text>
           </g>
+        )
+      })}
+      {(graph.level.labels ?? []).map((label) => {
+        const p = toView(label)
+        return (
+          <text key={label.text} className="label map-label" x={p.x} y={p.y} fontSize={LABEL_SIZE} style={{ fill: label.color }}>
+            {label.text}
+          </text>
         )
       })}
     </g>

@@ -98,6 +98,49 @@ export function findSteps(
   return steps
 }
 
+/** Whether a train can stop at the far end of `step`'s block without fouling the switch behind it. */
+export function hasRoom(graph: TrackGraph, step: RouteStep): boolean {
+  const edge = getEdge(graph, step.edgeId)
+  if (getNode(graph, stepEndNode(edge, step.direction)).kind === 'terminal') return true
+  return edge.lengthM >= graph.level.trainLengthM + 2 * STOP_CLEARANCE_M
+}
+
+/**
+ * Nearest run of steps after `from` that ends in a block with room for the whole train (see
+ * `hasRoom`) and still leads to `destination`, avoiding `blocked` edges. `[]` if `from` already
+ * has room; `null` if nothing ahead does.
+ */
+export function roomAhead(
+  graph: TrackGraph,
+  from: RouteStep,
+  destination: string,
+  blocked: ReadonlySet<string>,
+): RouteStep[] | null {
+  if (hasRoom(graph, from)) return []
+  const dist = new Map<string, number>()
+  const prev = new Map<string, RouteStep | null>()
+  const open: RouteStep[] = []
+  const relax = (step: RouteStep, d: number, via: RouteStep | null) => {
+    if (blocked.has(step.edgeId) || d >= (dist.get(stepKey(step)) ?? Infinity)) return
+    dist.set(stepKey(step), d)
+    prev.set(stepKey(step), via)
+    open.push(step)
+  }
+  for (const step of nextSteps(graph, from)) relax(step, getEdge(graph, step.edgeId).lengthM, null)
+  while (open.length > 0) {
+    open.sort((a, b) => dist.get(stepKey(a))! - dist.get(stepKey(b))!)
+    const current = open.shift()!
+    if (hasRoom(graph, current) && canReach(graph, current, destination)) {
+      const steps: RouteStep[] = []
+      for (let step: RouteStep | null = current; step; step = prev.get(stepKey(step)) ?? null) steps.unshift(step)
+      return steps
+    }
+    const d = dist.get(stepKey(current))!
+    for (const next of nextSteps(graph, current)) relax(next, d + getEdge(graph, next.edgeId).lengthM, current)
+  }
+  return null
+}
+
 /**
  * Where on `step` the head should stop for a tap anywhere in its block, or whether it should exit.
  * A train pulls up to the far end of the tapped block (short of the switch by the clearance), so the
@@ -158,6 +201,18 @@ export function requestRoute(
     if (refused) return refused
     steps = found
   }
+
+  // A block too short for the whole train would leave it across a switch: run on to the next one with room.
+  const lastTapped = steps.length > 0 ? steps[steps.length - 1] : headStep
+  const extension = roomAhead(graph, lastTapped, train.destination, heldByOthers)
+  if (!extension) {
+    const unobstructed = roomAhead(graph, lastTapped, train.destination, new Set())
+    const blockedEdge = unobstructed?.find((step) => heldByOthers.has(step.edgeId))
+    return blockedEdge
+      ? { ok: false, reason: 'blocked', blockedBy: state.reservations[blockedEdge.edgeId] }
+      : { ok: false, reason: 'no-path' }
+  }
+  steps = [...steps, ...extension]
 
   const path = [...train.path.slice(0, head.index + 1), ...steps]
   const lastStep = path[path.length - 1]

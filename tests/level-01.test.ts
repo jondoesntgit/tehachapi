@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
-import { requestRoute } from '../src/engine/routing'
+import { hasRoom, requestRoute } from '../src/engine/routing'
 import { buildTimetable, isLevelComplete } from '../src/engine/scheduler'
 import { createInitialState } from '../src/engine/simulation'
-import { buildGraph, getEdge, nextSteps } from '../src/engine/trackGraph'
+import { buildGraph, getEdge, locateOnPath, nextSteps } from '../src/engine/trackGraph'
 import type { GameState, TrackPosition } from '../src/engine/types'
 import { graph1 as graph, level1 as level, route, runUntil } from './helpers'
 
 const EAST_EXIT = { edgeId: 'M9', offsetM: 700 }
 const WEST_EXIT = { edgeId: 'M1', offsetM: 0 }
-const SOUTHEAST_EXIT = { edgeId: 'SE_LINE', offsetM: getEdge(graph, 'SE_LINE').lengthM }
+const SOUTHEAST_EXIT = { edgeId: 'SE3', offsetM: getEdge(graph, 'SE3').lengthM }
 const SIDINGS = ['SIDING_A', 'SIDING_B', 'SIDING_C', 'SIDING_D']
 
 const has = (id: string) => (s: GameState) => s.trains.some((t) => t.id === id)
@@ -38,9 +38,8 @@ describe('level 1', () => {
     const alone = buildGraph({ ...level, schedule: [t13], startingTrains: [] })
     const at = runUntil(alone, createInitialState(alone), (s) => s.trains.some((t) => t.id === 'T13'))
     const routed = route(alone, at, 'T13', WEST_EXIT)
-    expect(routed.trains.find((t) => t.id === 'T13')!.path.map((s) => s.edgeId).slice(0, 3)).toEqual([
-      'SE_LINE', 'SPUR_W', 'M5',
-    ])
+    const path = routed.trains.find((t) => t.id === 'T13')!.path.map((s) => s.edgeId)
+    expect(path.slice(path.indexOf('SE1'), path.indexOf('SE1') + 3)).toEqual(['SE1', 'SPUR_W', 'M5'])
   })
 
   it('has a wye off the main between sidings B and C, open to trains from either side', () => {
@@ -49,8 +48,8 @@ describe('level 1', () => {
     // Eastbound trains can turn down the west leg, westbound ones down the east leg.
     expect(ids(nextSteps(graph, { edgeId: 'M5', direction: 1 }))).toEqual(['M5M', 'SPUR_W'])
     expect(ids(nextSteps(graph, { edgeId: 'M5E', direction: -1 }))).toEqual(['M5M', 'SPUR_E'])
-    // Coming up from South, a train can head either way.
-    expect(ids(nextSteps(graph, { edgeId: 'SE_LINE', direction: -1 }))).toEqual(['SPUR_E', 'SPUR_W'])
+    // Coming up from the SE line, a train can head either way.
+    expect(ids(nextSteps(graph, { edgeId: 'SE1', direction: -1 }))).toEqual(['SPUR_E', 'SPUR_W'])
     expect(ids(nextSteps(graph, { edgeId: 'SPUR_E', direction: -1 }))).toEqual(['M5E'])
     expect(ids(nextSteps(graph, { edgeId: 'SPUR_W', direction: -1 }))).toEqual(['M5'])
   })
@@ -59,23 +58,43 @@ describe('level 1', () => {
     const t12 = level.schedule.find((e) => e.id === 'T12')!
     expect([t12.entry, t12.destination]).toEqual(['SOUTHEAST', 'EAST'])
     let state = runUntil(graph, createInitialState(graph), has('T12'))
-    expect(state.trains.find((t) => t.id === 'T12')!.path[0]).toEqual({ edgeId: 'SE_LINE', direction: -1 })
+    expect(state.trains.find((t) => t.id === 'T12')!.path[0]).toEqual({ edgeId: 'SE3', direction: -1 })
     // Nobody has dispatched T2, which holds the east entry, so stop T12 short of it.
     state = routeWhenClear(state, 'T12', { edgeId: 'M7', offsetM: 600 })
-    expect(state.trains.find((t) => t.id === 'T12')!.path.map((s) => s.edgeId).slice(0, 3)).toEqual([
-      'SE_LINE', 'SPUR_E', 'M5E',
-    ])
+    const path = state.trains.find((t) => t.id === 'T12')!.path.map((s) => s.edgeId)
+    expect(path.slice(path.indexOf('SE1'), path.indexOf('SE1') + 3)).toEqual(['SE1', 'SPUR_E', 'M5E'])
   })
 
-  it('runs the Southeast line under the main, parallel to it, out to the east end', () => {
-    const line = getEdge(graph, 'SE_LINE')
-    const run = line.polyline.slice(2)
-    expect(run.every((p) => p.y === run[0].y && p.y > 60)).toBe(true)
-    expect(run[run.length - 1].x).toBe(graph.nodes.get('EAST')!.x)
+  it('runs the SE line under the main in three blocks, with a passing siding in the middle one', () => {
+    const blocks = ['SE1', 'SE2', 'SE3'].map((id) => getEdge(graph, id))
+    expect(blocks.map((e) => [e.from, e.to])).toEqual([['SW_SJ', 'SW_E1'], ['SW_E1', 'SW_E2'], ['SW_E2', 'SOUTHEAST']])
+    // Under the main, parallel to it, out to the east end.
+    const run = [...blocks[0].polyline.slice(2), ...blocks[1].polyline, ...blocks[2].polyline]
+    expect(run.every((p) => p.y === 180)).toBe(true)
+    expect(graph.nodes.get('SOUTHEAST')!.x).toBe(graph.nodes.get('EAST')!.x)
     // It leaves the wye straight down, so trains on either leg can take it.
-    expect(line.polyline[1].x).toBe(line.polyline[0].x)
+    expect(blocks[0].polyline[1].x).toBe(blocks[0].polyline[0].x)
+    // Every block but the last holds a whole train; the loop pairs with SE2.
+    for (const id of ['SE1', 'SE2', 'SE_LOOP']) expect(getEdge(graph, id).lengthM).toBeGreaterThanOrEqual(level.trainLengthM + 40)
+    expect(getEdge(graph, 'SE_LOOP')).toMatchObject({ from: 'SW_E1', to: 'SW_E2' })
   })
 
+  it('stops a train from the SE-Terminal in the first block, short of the passing siding', () => {
+    let state = runUntil(graph, createInitialState(graph), has('T12'))
+    state = runUntil(graph, state, (s) => s.trains.find((t) => t.id === 'T12')!.speedMps === 0)
+    const t12 = state.trains.find((t) => t.id === 'T12')!
+    expect(locateOnPath(graph, t12.path, t12.headM)).toEqual({ edgeId: 'SE3', offsetM: 20, direction: -1 })
+  })
+
+  it('never stops a train on a wye leg or a short block at the wye', () => {
+    let state = route(graph, createInitialState(graph), 'L3', WEST_EXIT)
+    state = runUntil(graph, state, has('T1'))
+    // A tap on the 200 m block east of the wye runs T1 on to the next block it fits in.
+    state = routeWhenClear(state, 'T1', { edgeId: 'M5', offsetM: 100 })
+    const t1 = state.trains.find((t) => t.id === 'T1')!
+    expect(['M5M', 'M5', 'M5E', 'SPUR_W']).not.toContain(locateOnPath(graph, t1.path, t1.stopAtM!).edgeId)
+    expect(hasRoom(graph, t1.path[t1.path.length - 1])).toBe(true)
+  })
   it('refuses to send a train toward the wrong terminal and moves its due time 3 minutes earlier', () => {
     let state = runUntil(graph, createInitialState(graph), has('T1'))
     const dueAtS = state.trains.find((t) => t.id === 'T1')!.dueAtS
@@ -87,7 +106,7 @@ describe('level 1', () => {
     expect(state.reservations).toBe(reservations)
 
     // A stop partway down the Southeast line is a dead end for T1 too.
-    const again = requestRoute(graph, state, 'T1', { edgeId: 'SE_LINE', offsetM: 1500 })
+    const again = requestRoute(graph, state, 'T1', { edgeId: 'SE1', offsetM: 800 })
     expect(again).toMatchObject({ ok: false, reason: 'wrong-destination' })
     expect(again.ok || again.state!.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(dueAtS - 6 * 60)
   })

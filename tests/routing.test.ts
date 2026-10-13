@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
-import { canReach, findSteps, requestRoute, STOP_CLEARANCE_M, WRONG_DESTINATION_PENALTY_S } from '../src/engine/routing'
+import { canReach, findSteps, hasRoom, requestRoute, STOP_CLEARANCE_M, WRONG_DESTINATION_PENALTY_S } from '../src/engine/routing'
 import { createInitialState, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath } from '../src/engine/trackGraph'
 import type { GameState } from '../src/engine/types'
@@ -150,5 +150,35 @@ describe('wrong destination', () => {
     expect(canReach(graph, { edgeId: 'M1', direction: 1 }, 'EAST')).toBe(true)
     expect(canReach(graph, { edgeId: 'M1', direction: 1 }, 'WEST')).toBe(false)
     expect(canReach(graph, { edgeId: 'M3', direction: -1 }, 'WEST')).toBe(true)
+  })
+})
+
+describe('room to stop', () => {
+  // Trains nearly as long as M2 and the sidings: only M1, M3 onward and terminal blocks fit them.
+  const long = buildGraph({ ...level, trainLengthM: 1190, startingTrains: [] })
+  const enter = () => step(long, { ...createInitialState(long), timeS: parseClock('10:32') - 0.1 }, 0.1)
+
+  it('knows which blocks hold a whole train clear of both switches', () => {
+    expect(hasRoom(long, { edgeId: 'M2', direction: 1 })).toBe(false)
+    expect(hasRoom(long, { edgeId: 'SIDING_A', direction: 1 })).toBe(false)
+    expect(hasRoom(long, { edgeId: 'M3', direction: 1 })).toBe(true)
+    expect(hasRoom(long, { edgeId: 'M5', direction: 1 })).toBe(true)
+  })
+
+  it('runs a train on past a block too short for it to the next one with room', () => {
+    const state = route(long, enter(), 'T1', { edgeId: 'M2', offsetM: 600 })
+    const t1 = state.trains[0]
+    expect(t1.path.map((s) => s.edgeId)).toEqual(['M1', 'M2', 'M3'])
+    expect(locateOnPath(long, t1.path, t1.stopAtM!)).toEqual({ edgeId: 'M3', offsetM: 1600 - STOP_CLEARANCE_M, direction: 1 })
+  })
+
+  it('reports the train holding the next block with room', () => {
+    const state = enter()
+    const held = { ...state, reservations: { ...state.reservations, M3: 'T9' } }
+    expect(requestRoute(long, held, 'T1', { edgeId: 'M2', offsetM: 600 })).toMatchObject({
+      ok: false,
+      reason: 'blocked',
+      blockedBy: 'T9',
+    })
   })
 })

@@ -23,6 +23,16 @@ export interface LevelEdge {
   points?: [number, number][]
   /** Overrides the polyline length when present. */
   lengthM?: number
+  /** Terminal id this edge is a branch toward; drawn in a faint tint of that terminal's color. */
+  branch?: string
+}
+
+/** Text drawn on the map at a world position. */
+export interface MapLabel {
+  text: string
+  x: number
+  y: number
+  color?: string
 }
 
 export interface PhysicsConfig {
@@ -83,6 +93,8 @@ export interface Level {
    */
   appearsJitterMin?: number
   startingTrains?: StartingTrain[]
+  /** Extra text on the map, e.g. naming a branch. */
+  labels?: MapLabel[]
 }
 
 /** 1 = travelling from the edge's `from` node toward `to`; -1 = the reverse. */

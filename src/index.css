@@ -74,6 +74,24 @@ body,
   stroke-width: 3;
 }
 
+/* A branch toward a terminal, tinted with that terminal's color. */
+.track-branch {
+  stroke: var(--branch-color, var(--track));
+  stroke-opacity: 0.6;
+}
+
+/* A train just entered here. */
+.portal-entered {
+  animation: portal-pulse 0.6s ease-in-out 4;
+}
+
+@keyframes portal-pulse {
+  50% {
+    stroke: var(--text);
+    stroke-width: 9;
+  }
+}
+
 .switch {
   fill: var(--muted);
 }

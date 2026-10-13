@@ -55,7 +55,7 @@ export function Help({ onClose }: { onClose: () => void }) {
               <dt>Tap a train</dt>
               <dd>Select it. The train chips along the bottom select too.</dd>
               <dt>Then tap track</dt>
-              <dd>Send it into that block. It speeds up, cruises and pulls up at the far end of the block, leaving the track behind it clear.</dd>
+              <dd>Send it into that block. It speeds up, cruises and pulls up at the far end of the block, leaving the track behind it clear. If the block is too short for the whole train, it runs on to the next block it fits in.</dd>
               <dt>Then tap a terminal</dt>
               <dd>Send it out through that end of the line. Tapping anywhere in the last block before a terminal does the same.</dd>
               <dt>Tap empty space</dt>

@@ -103,6 +103,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
   - The shortest path that avoids edges reserved by other trains wins, so a train takes a siding by itself when the main is held.
   - On success, every edge in the train's path is reserved by it (`GameState.reservations`). Reserved edges render green.
   - A train pulls up to the far end of the tapped edge (block), `STOP_CLEARANCE_M` (20 m) short of the switch, wherever in it the tap landed, so the block behind it is clear and a stopped train never fouls a switch (`resolveStop`).
+  - A train never stops in a block too short to hold it clear of both switches (`hasRoom`: `trainLengthM + 2 × STOP_CLEARANCE_M`); `roomAhead` runs it on to the nearest block ahead with room that still leads to its destination.
   - Each end of track always has room to clear arriving trains: a target anywhere in a block that ends at a terminal becomes an exit. The store shows a message when a train clears its terminal, saying whether it was on time.
   - Refusals: `no-path`, `blocked` (names the train in the way), `too-close` (cannot brake in time), `departing`, `wrong-destination`.
   - `wrong-destination`: from the target, the train could only leave by a terminal other than its destination (`canReach`). The refusal carries a new `state` in which the train's due time is `WRONG_DESTINATION_PENALTY_S` (3 min) earlier; the store applies it.
@@ -113,6 +114,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
   - Otherwise it accelerates at `accel` up to `maxSpeed`.
   - The final step is clamped so the head lands exactly on the target with v = 0.
 - **Timetable:** `createInitialState(graph, seed)` builds `GameState.timetable` (`buildTimetable`): a scheduled train with `appearsBetween` appears at a random whole minute in that window; any other moves by a random whole number of minutes, up to the level's `appearsJitterMin` either way. The due time moves with the appearance. The store passes a fresh random seed each game; with no seed (tests) the timetable is as written. The engine only ever reads times from `state.timetable`.
+- **Entry pulse:** the store counts entries per terminal (`entryCounts`); the map pulses a terminal's end bar each time a train enters there.
 - **Spawning:** at its timetabled appearance, a train's head enters at its terminal's portal with the body still off the map. It is routed to the far end of its entry edge and stops there until the player sends it on. If the entry edge is reserved, the train stays pending and the HUD warns.
 - **Starting trains:** a level's `startingTrains` are already on the board at the start, stopped on their edge with the head `STOP_CLEARANCE_M` short of the far end (`placeStartingTrains`). With a seed, a train with `edgeChoices` stands on a random one of them that no earlier starting train has taken (its own random stream, so it doesn't change the timetable draws). The whole train must fit on that edge clear of both switches.
 - **Leaving and scoring:** arrival time is when the head reaches the exit terminal; the train is removed when its tail clears. A `TrainResult` records minutes late (0 = on time) and whether it left through its scheduled destination (routing makes a wrong exit impossible, so this is always true in play).
@@ -126,7 +128,8 @@ See `levels/level-01.json`. Key fields:
 - `appearsJitterMin` (optional) — max random shift, in minutes either way, applied to each scheduled train per game.
 - `trainLengthM`, `physics.accelMps2`, `physics.decelMps2`, `physics.stopMarginM`.
 - `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label?, color? }`. A terminal's `color` is the color of trains heading there (map, train list, help legend).
-- `edges[]`: `{ id, from, to, points?: [[x,y],...], lengthM? }`.
+- `edges[]`: `{ id, from, to, points?: [[x,y],...], lengthM?, branch? }`. `branch` names a terminal; the edge is drawn in a faint tint of its color.
+- `labels[]` (optional): `{ text, x, y, color? }` — extra text on the map at a world position.
 - `schedule[]`: `{ id, name, appearsAt, appearsBetween?: ["HH:MM", "HH:MM"], entry: <terminal node id>, maxSpeedMps, destination: <terminal node id>, dueAt }`. `appearsAt`/`dueAt` are the written timetable; `appearsBetween` (which must contain `appearsAt`) randomizes the appearance over that window each game.
 - `startingTrains[]` (optional): `{ id, name, edge, edgeChoices?: [edge ids], direction: 1 | -1, maxSpeedMps, destination: <terminal node id>, dueAt }` — trains standing on `edge` at the start, facing `direction`. `edgeChoices` (which must contain `edge`) picks a random free one each game.
 
@@ -149,7 +152,7 @@ Done:
 3. Render track + trains in SVG, fit to screen.
 4. Tap-to-route with reservations (green).
 5. Clock, HUD, scheduler from JSON, fast-forward.
-6. Level 1: four sidings, a wye to a Southeast line running under the main, sixteen trains (two bound for Southeast, two entering from it; three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring, randomized entry times, trains colored by destination.
+6. Level 1: four sidings, a wye to an SE line running under the main (three blocks, a passing siding, tinted, labelled), sixteen trains (two bound for Southeast, two entering from it; three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring, randomized entry times, trains colored by destination.
 
 Next:
 7. Deadlock detection and a level-failed state; end-of-level score summary.

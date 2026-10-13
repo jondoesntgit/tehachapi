@@ -14,6 +14,8 @@
     { "id": "SW_SW", "x": 2800, "y": 0, "kind": "switch" },
     { "id": "SW_SE", "x": 3200, "y": 0, "kind": "switch" },
     { "id": "SW_SJ", "x": 3000, "y": 100, "kind": "switch" },
+    { "id": "SW_E1", "x": 4200, "y": 180, "kind": "switch" },
+    { "id": "SW_E2", "x": 4800, "y": 180, "kind": "switch" },
     { "id": "SOUTHEAST", "x": 6000, "y": 180, "kind": "terminal", "label": "SE-Terminal", "color": "#ffdc3c" },
     { "id": "SW_C1", "x": 3400, "y": 0, "kind": "switch" },
     { "id": "SW_C2", "x": 4000, "y": 0, "kind": "switch" },
@@ -37,9 +39,15 @@
     { "id": "SIDING_B", "from": "SW_B1", "to": "SW_B2", "points": [[2100, 60], [2500, 60]] },
     { "id": "SIDING_C", "from": "SW_C1", "to": "SW_C2", "points": [[3500, -60], [3900, -60]] },
     { "id": "SIDING_D", "from": "SW_D1", "to": "SW_D2", "points": [[4800, 60], [5200, 60]] },
-    { "id": "SPUR_W", "from": "SW_SW", "to": "SW_SJ", "points": [[2900, 30]] },
-    { "id": "SPUR_E", "from": "SW_SE", "to": "SW_SJ", "points": [[3100, 30]] },
-    { "id": "SE_LINE", "from": "SW_SJ", "to": "SOUTHEAST", "points": [[3000, 160], [3060, 180]] }
+    { "id": "SPUR_W", "from": "SW_SW", "to": "SW_SJ", "points": [[2900, 30]], "branch": "SOUTHEAST" },
+    { "id": "SPUR_E", "from": "SW_SE", "to": "SW_SJ", "points": [[3100, 30]], "branch": "SOUTHEAST" },
+    { "id": "SE1", "from": "SW_SJ", "to": "SW_E1", "points": [[3000, 160], [3060, 180]], "branch": "SOUTHEAST" },
+    { "id": "SE2", "from": "SW_E1", "to": "SW_E2", "branch": "SOUTHEAST" },
+    { "id": "SE_LOOP", "from": "SW_E1", "to": "SW_E2", "points": [[4300, 120], [4700, 120]], "branch": "SOUTHEAST" },
+    { "id": "SE3", "from": "SW_E2", "to": "SOUTHEAST", "branch": "SOUTHEAST" }
+  ],
+  "labels": [
+    { "text": "to SE-Terminal", "x": 3120, "y": 150, "color": "#ffdc3c" }
   ],
   "startingTrains": [
     {

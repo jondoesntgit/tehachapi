@@ -18,6 +18,8 @@ interface GameStore {
   message: string | null
   /** The help panel is open; the simulation is paused while it is. */
   helpOpen: boolean
+  /** Terminal id -> trains that have entered there; the map pulses a terminal when it changes. */
+  entryCounts: Record<string, number>
   /** Advances the simulation by a frame's worth of real time. */
   tick: (realDtS: number) => void
   selectTrain: (trainId: string | null) => void
@@ -71,6 +73,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   timeScale: 1,
   message: null,
   helpOpen: false,
+  entryCounts: {},
 
   tick: (realDtS) => {
     const { graph, game, timeScale, selectedTrainId, helpOpen } = get()
@@ -84,7 +87,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (next === game) return
     const stillThere = next.trains.some((t) => t.id === selectedTrainId)
     // A train entering is the dispatcher's cue to act, so drop out of fast-forward.
-    const entered = next.trains.some((t) => !game.trains.some((g) => g.id === t.id))
+    const newTrains = next.trains.filter((t) => !game.trains.some((g) => g.id === t.id))
+    const entered = newTrains.length > 0
+    const entryCounts = { ...get().entryCounts }
+    for (const train of newTrains) {
+      const terminal = graph.level.schedule.find((e) => e.id === train.id)?.entry
+      if (terminal) entryCounts[terminal] = (entryCounts[terminal] ?? 0) + 1
+    }
     // Say how each train that just cleared its terminal did.
     const cleared = next.results.slice(game.results.length)
     const label = (nodeId: string) => graph.nodes.get(nodeId)?.label ?? nodeId
@@ -95,6 +104,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       game: next,
       selectedTrainId: stillThere ? selectedTrainId : null,
       timeScale: entered ? 1 : timeScale,
+      ...(entered && { entryCounts }),
       ...(arrivalMessage && { message: arrivalMessage }),
     })
   },

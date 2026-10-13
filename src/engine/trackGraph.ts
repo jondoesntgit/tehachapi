@@ -45,6 +45,9 @@ export function buildGraph(level: Level): TrackGraph {
     for (let i = 1; i < polyline.length; i++) {
       cumulativeM.push(cumulativeM[i - 1] + distance(polyline[i - 1], polyline[i]))
     }
+    if (edge.branch !== undefined && level.nodes.find((n) => n.id === edge.branch)?.kind !== 'terminal') {
+      throw new Error(`Edge "${edge.id}" is a branch toward "${edge.branch}", which is not a terminal`)
+    }
     const lengthM = edge.lengthM ?? cumulativeM[cumulativeM.length - 1]
     if (!(lengthM > 0)) throw new Error(`Edge "${edge.id}" has no length`)
 
