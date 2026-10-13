@@ -72,7 +72,7 @@ src/
   render/            # React components that only READ engine state
     view.ts          # World -> view mapping (Y_SCALE), viewBox
     TrackLayer.tsx   # <polyline> per edge; green when reserved
-    TrainLayer.tsx   # Thick <polyline> per train body, label, stop marker
+    TrainLayer.tsx   # Thick <polyline> per train body in its destination's color, label, stop marker
     Hud.tsx          # Clock, speed buttons, train list, messages, level-complete panel
   input/
     useTapRouting.ts # Tap train -> select; tap track or terminal -> request route
@@ -123,7 +123,7 @@ See `levels/level-01.json`. Key fields:
 - `startTime` — game clock at level start, `"HH:MM"`.
 - `appearsJitterMin` (optional) — max random shift, in minutes either way, applied to each scheduled train per game.
 - `trainLengthM`, `physics.accelMps2`, `physics.decelMps2`, `physics.stopMarginM`.
-- `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label? }`.
+- `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label?, color? }`. A terminal's `color` is the color of trains heading there (map, train list, help legend).
 - `edges[]`: `{ id, from, to, points?: [[x,y],...], lengthM? }`.
 - `schedule[]`: `{ id, name, appearsAt, appearsBetween?: ["HH:MM", "HH:MM"], entry: <terminal node id>, maxSpeedMps, destination: <terminal node id>, dueAt }`. `appearsAt`/`dueAt` are the written timetable; `appearsBetween` (which must contain `appearsAt`) randomizes the appearance over that window each game.
 - `startingTrains[]` (optional): `{ id, name, edge, edgeChoices?: [edge ids], direction: 1 | -1, maxSpeedMps, destination: <terminal node id>, dueAt }` — trains standing on `edge` at the start, facing `direction`. `edgeChoices` (which must contain `edge`) picks a random free one each game.
@@ -147,7 +147,7 @@ Done:
 3. Render track + trains in SVG, fit to screen.
 4. Tap-to-route with reservations (green).
 5. Clock, HUD, scheduler from JSON, fast-forward.
-6. Level 1: four sidings, a South spur, twelve trains (three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring, randomized entry times.
+6. Level 1: four sidings, a South spur, fourteen trains (two bound for South; three waiting on sidings at the start, two of them on random sidings), meets/passes, scoring, randomized entry times, trains colored by destination.
 
 Next:
 7. Deadlock detection and a level-failed state; end-of-level score summary.

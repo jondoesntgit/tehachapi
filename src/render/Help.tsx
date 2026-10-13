@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
+import { useGameStore } from '../store'
 
 /** A short stretch of map drawn with the same classes the map uses, so the legend can't drift. */
 function Swatch({ children }: { children: ReactNode }) {
@@ -14,7 +15,6 @@ const line = (className: string) => <polyline className={className} points="6,10
 const LEGEND: { swatch: ReactNode; text: string }[] = [
   { swatch: line('track'), text: 'Free track' },
   { swatch: line('track track-reserved'), text: 'Track reserved for a train’s route' },
-  { swatch: line('train'), text: 'Train' },
   { swatch: line('train train-selected'), text: 'Selected train' },
   { swatch: <circle className="stop-marker" cx={24} cy={10} r={7} />, text: 'Where the selected train will stop' },
   { swatch: <circle className="switch" cx={24} cy={10} r={4} />, text: 'Switch' },
@@ -22,6 +22,21 @@ const LEGEND: { swatch: ReactNode; text: string }[] = [
 ]
 
 export function Help({ onClose }: { onClose: () => void }) {
+  const graph = useGameStore((s) => s.graph)
+  // One train swatch per destination, in the destination's color.
+  const trainColors = [...graph.nodes.values()]
+    .filter((node) => node.kind === 'terminal' && node.color)
+    .map((node) => ({
+      swatch: (
+        <polyline
+          className="train"
+          style={{ '--train-color': node.color } as CSSProperties}
+          points="6,10 42,10"
+        />
+      ),
+      text: `Train heading to ${node.label ?? node.id}`,
+    }))
+  const legend = [...LEGEND.slice(0, 2), ...trainColors, ...LEGEND.slice(2)]
   return (
     <div className="hud help-backdrop" onClick={onClose}>
       <div className="help" role="dialog" aria-label="Help" onClick={(e) => e.stopPropagation()}>
@@ -61,7 +76,7 @@ export function Help({ onClose }: { onClose: () => void }) {
           <section>
             <h3>Map colors</h3>
             <ul className="legend">
-              {LEGEND.map(({ swatch, text }) => (
+              {legend.map(({ swatch, text }) => (
                 <li key={text}>
                   <Swatch>{swatch}</Swatch>
                   {text}

@@ -76,7 +76,8 @@ body,
 }
 
 .train {
-  stroke: var(--train);
+  /* --train-color is the destination terminal's color, set per train. */
+  stroke: var(--train-color, var(--train));
   stroke-width: 11;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -321,4 +322,12 @@ button:disabled {
   flex: none;
   width: 48px;
   height: 20px;
+}
+
+.dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--train);
 }

@@ -11,6 +11,8 @@ export interface LevelNode {
   y: number
   kind: NodeKind
   label?: string
+  /** Terminals only: CSS color for trains heading here, on the map and in the train list. */
+  color?: string
 }
 
 export interface LevelEdge {

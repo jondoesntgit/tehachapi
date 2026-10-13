@@ -57,3 +57,8 @@ export function viewBox(graph: TrackGraph): string {
   const height = Math.max(...ys) + PADDING_Y - minY
   return `${minX} ${minY} ${width} ${height}`
 }
+
+/** Color for a train heading to `destination`, if its terminal has one. */
+export function destinationColor(graph: TrackGraph, destination: string): string | undefined {
+  return graph.nodes.get(destination)?.color
+}

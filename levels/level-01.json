@@ -6,18 +6,18 @@
   "physics": { "accelMps2": 0.25, "decelMps2": 0.35, "stopMarginM": 5 },
   "appearsJitterMin": 3,
   "nodes": [
-    { "id": "WEST",  "x": 0,    "y": 0, "kind": "terminal", "label": "West Terminal" },
+    { "id": "WEST",  "x": 0,    "y": 0, "kind": "terminal", "label": "West Terminal", "color": "#ff9640" },
     { "id": "SW_A1", "x": 700,  "y": 0, "kind": "switch" },
     { "id": "SW_A2", "x": 1300, "y": 0, "kind": "switch" },
     { "id": "SW_B1", "x": 2000, "y": 0, "kind": "switch" },
     { "id": "SW_B2", "x": 2600, "y": 0, "kind": "switch" },
     { "id": "SW_S",  "x": 3000, "y": 0, "kind": "switch" },
-    { "id": "SOUTH", "x": 3300, "y": 160, "kind": "terminal", "label": "South" },
+    { "id": "SOUTH", "x": 3300, "y": 160, "kind": "terminal", "label": "South", "color": "#ffdc3c" },
     { "id": "SW_C1", "x": 3400, "y": 0, "kind": "switch" },
     { "id": "SW_C2", "x": 4000, "y": 0, "kind": "switch" },
     { "id": "SW_D1", "x": 4700, "y": 0, "kind": "switch" },
     { "id": "SW_D2", "x": 5300, "y": 0, "kind": "switch" },
-    { "id": "EAST",  "x": 6000, "y": 0, "kind": "terminal", "label": "East Terminal" }
+    { "id": "EAST",  "x": 6000, "y": 0, "kind": "terminal", "label": "East Terminal", "color": "#b98cff" }
   ],
   "edges": [
     { "id": "M1", "from": "WEST",  "to": "SW_A1" },
@@ -98,6 +98,16 @@
       "id": "T9", "name": "Westbound Local 909",
       "appearsAt": "11:20", "appearsBetween": ["10:30", "11:30"], "entry": "EAST",
       "maxSpeedMps": 12, "destination": "WEST", "dueAt": "11:45"
+    },
+    {
+      "id": "T10", "name": "Southbound Freight 110",
+      "appearsAt": "10:20", "appearsBetween": ["10:00", "11:00"], "entry": "WEST",
+      "maxSpeedMps": 15, "destination": "SOUTH", "dueAt": "10:38"
+    },
+    {
+      "id": "T11", "name": "Southbound Local 111",
+      "appearsAt": "11:26", "appearsBetween": ["10:30", "11:30"], "entry": "WEST",
+      "maxSpeedMps": 12, "destination": "SOUTH", "dueAt": "11:50"
     }
   ]
 }

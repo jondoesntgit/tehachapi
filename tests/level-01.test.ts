@@ -9,6 +9,7 @@ import { graph1 as graph, level1 as level, route, runUntil } from './helpers'
 
 const EAST_EXIT = { edgeId: 'M9', offsetM: 700 }
 const WEST_EXIT = { edgeId: 'M1', offsetM: 0 }
+const SOUTH_EXIT = { edgeId: 'SPUR_S', offsetM: getEdge(graph, 'SPUR_S').lengthM }
 const SIDINGS = ['SIDING_A', 'SIDING_B', 'SIDING_C', 'SIDING_D']
 
 const has = (id: string) => (s: GameState) => s.trains.some((t) => t.id === id)
@@ -26,7 +27,7 @@ describe('level 1', () => {
       expect(lengthM).toBeGreaterThanOrEqual(level.trainLengthM + 40)
       expect(lengthM).toBeLessThan(700)
     }
-    expect(level.schedule).toHaveLength(9)
+    expect(level.schedule).toHaveLength(11)
     expect(level.startingTrains).toHaveLength(3)
   })
 
@@ -41,7 +42,7 @@ describe('level 1', () => {
 
   it('lets an eastbound train leave through South, scored as the wrong exit', () => {
     let state = runUntil(graph, createInitialState(graph), has('T1'))
-    state = routeWhenClear(state, 'T1', { edgeId: 'SPUR_S', offsetM: getEdge(graph, 'SPUR_S').lengthM })
+    state = routeWhenClear(state, 'T1', SOUTH_EXIT)
     state = runUntil(graph, state, (s) => s.results.some((r) => r.trainId === 'T1'))
     expect(state.results.find((r) => r.trainId === 'T1')).toMatchObject({ exitedAt: 'SOUTH', reachedDestination: false })
   })
@@ -53,34 +54,40 @@ describe('level 1', () => {
     }
   })
 
-  it('enters T1–T3 from 10:00 to 10:25, T7–T9 from 10:30 to 11:30, and the rest within the jitter', () => {
+  it('enters windowed trains at random whole minutes in their window, and the rest within the jitter', () => {
     const jitterS = level.appearsJitterMin! * 60
-    const seen = new Set<number>()
-    const seenLate = new Set<number>()
+    const windows: Record<string, [string, string]> = {
+      T1: ['10:00', '10:25'], T2: ['10:00', '10:25'], T3: ['10:00', '10:25'],
+      T7: ['10:30', '11:30'], T8: ['10:30', '11:30'], T9: ['10:30', '11:30'],
+      T10: ['10:00', '11:00'], T11: ['10:30', '11:30'],
+    }
+    const seen: Record<string, Set<number>> = {}
     for (let seed = 0; seed < 200; seed++) {
       const timetable = buildTimetable(graph, seed)
       for (const entry of level.schedule) {
         const { appearsAtS, dueAtS } = timetable[entry.id]
         expect(Math.abs(appearsAtS) % 60).toBe(0)
         expect(dueAtS - appearsAtS).toBe(parseClock(entry.dueAt) - parseClock(entry.appearsAt))
-        if (['T1', 'T2', 'T3'].includes(entry.id)) {
-          expect(entry.appearsBetween).toEqual(['10:00', '10:25'])
-          expect(appearsAtS).toBeGreaterThanOrEqual(parseClock('10:00'))
-          expect(appearsAtS).toBeLessThanOrEqual(parseClock('10:25'))
-          seen.add(appearsAtS)
-        } else if (['T7', 'T8', 'T9'].includes(entry.id)) {
-          expect(entry.appearsBetween).toEqual(['10:30', '11:30'])
-          expect(appearsAtS).toBeGreaterThanOrEqual(parseClock('10:30'))
-          expect(appearsAtS).toBeLessThanOrEqual(parseClock('11:30'))
-          seenLate.add(appearsAtS)
+        const window = windows[entry.id]
+        expect(entry.appearsBetween).toEqual(window)
+        if (window) {
+          expect(appearsAtS).toBeGreaterThanOrEqual(parseClock(window[0]))
+          expect(appearsAtS).toBeLessThanOrEqual(parseClock(window[1]))
+          ;(seen[entry.id] ??= new Set()).add(appearsAtS)
         } else {
           expect(Math.abs(appearsAtS - parseClock(entry.appearsAt))).toBeLessThanOrEqual(jitterS)
         }
       }
     }
-    // Every minute of the window, both ends included, comes up.
-    expect(seen.size).toBe(26)
-    expect(seenLate.size).toBeGreaterThan(50)
+    // Every minute of T1's window, both ends included, comes up.
+    expect(seen.T1.size).toBe(26)
+    expect(seen.T11.size).toBeGreaterThan(50)
+  })
+
+  it('sends two trains, entering from the west, to South', () => {
+    const south = level.schedule.filter((e) => e.destination === 'SOUTH')
+    expect(south.map((e) => [e.id, e.entry])).toEqual([['T10', 'WEST'], ['T11', 'WEST']])
+    expect(graph.nodes.get('SOUTH')?.color).toBeDefined()
   })
 
   it('puts L1 on siding A and L2, L3 on different random sidings among B, C and D', () => {
@@ -147,6 +154,10 @@ describe('level 1', () => {
     state = routeWhenClear(state, 'T3', EAST_EXIT)
     state = routeWhenClear(state, 'T2', WEST_EXIT)
 
+    // T10 enters behind T2 and turns off down the South spur.
+    state = runUntil(graph, state, has('T10'))
+    state = routeWhenClear(state, 'T10', SOUTH_EXIT)
+
     // Express T4 follows T2 west; local T5 waits in siding D for freight T6, then runs east.
     state = runUntil(graph, state, has('T4'))
     state = routeWhenClear(state, 'T4', WEST_EXIT)
@@ -163,10 +174,14 @@ describe('level 1', () => {
     state = routeWhenClear(state, 'T8', EAST_EXIT)
     state = runUntil(graph, state, has('T9'))
     state = routeWhenClear(state, 'T9', WEST_EXIT)
+
+    // T11 waits off the map until T9 is home, then runs down to South.
+    state = runUntil(graph, state, has('T11'))
+    state = routeWhenClear(state, 'T11', SOUTH_EXIT)
     state = runUntil(graph, state, isLevelComplete)
 
     expect(state.results.map((r) => r.trainId).sort()).toEqual([
-      'L1', 'L2', 'L3', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
+      'L1', 'L2', 'L3', 'T1', 'T10', 'T11', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
     ])
     expect(state.results.every((r) => r.reachedDestination)).toBe(true)
     expect(state.results.filter((r) => r.lateMinutes > 0)).toEqual([])

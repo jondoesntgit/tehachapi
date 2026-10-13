@@ -3,6 +3,7 @@ import { formatClock } from '../engine/clock'
 import { getScheduleEntry, heldAtPortal, isLevelComplete, nextArrivalS } from '../engine/scheduler'
 import { TIME_SCALES, useGameStore } from '../store'
 import { Help } from './Help'
+import { destinationColor } from './view'
 
 const MESSAGE_MS = 3000
 
@@ -80,12 +81,14 @@ export function Hud() {
             className={train.id === selectedTrainId ? 'chip active' : 'chip'}
             onClick={() => selectTrain(train.id === selectedTrainId ? null : train.id)}
           >
+            <span className="dot" style={{ background: destinationColor(graph, train.destination) }} />
             <b>{train.id}</b> {train.name} → {label(train.destination)} by {formatClock(train.dueAtS)} ·{' '}
             {Math.round(train.speedMps * 3.6)} km/h
           </button>
         ))}
         {upcoming.map((entry) => (
           <span key={entry.id} className="chip upcoming">
+            <span className="dot" style={{ background: destinationColor(graph, entry.destination) }} />
             <b>{formatClock(game.timetable[entry.id].appearsAtS)}</b> {entry.name} · {label(entry.entry)} →{' '}
             {label(entry.destination)} by {formatClock(game.timetable[entry.id].dueAtS)}
           </span>
