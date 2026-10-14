@@ -158,13 +158,21 @@ export function edgePolyline(edge: GraphEdge, fromOffsetM: number, toOffsetM: nu
 }
 
 /** Unit-less travel heading where a step starts or ends. */
-function heading(edge: GraphEdge, direction: Direction, at: 'start' | 'end'): Vec2 {
+export function heading(edge: GraphEdge, direction: Direction, at: 'start' | 'end'): Vec2 {
   const p = edge.polyline
   const last = p.length - 1
   // Pick the polyline segment at that end, then orient it along the direction of travel.
   const atFromEnd = (direction === 1) === (at === 'start')
   const [a, b] = atFromEnd ? [p[0], p[1]] : [p[last - 1], p[last]]
   return { x: (b.x - a.x) * direction, y: (b.y - a.y) * direction }
+}
+
+/** Angle, in degrees, a train turns through going from the end of `from` onto `to` (0 = straight on). */
+export function turnDegrees(graph: TrackGraph, from: RouteStep, to: RouteStep): number {
+  const a = heading(getEdge(graph, from.edgeId), from.direction, 'end')
+  const b = heading(getEdge(graph, to.edgeId), to.direction, 'start')
+  const cos = (a.x * b.x + a.y * b.y) / (Math.hypot(a.x, a.y) * Math.hypot(b.x, b.y))
+  return (Math.acos(Math.min(1, Math.max(-1, cos))) * 180) / Math.PI
 }
 
 /**

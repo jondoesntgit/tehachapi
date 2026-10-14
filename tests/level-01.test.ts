@@ -3,7 +3,7 @@ import { parseClock } from '../src/engine/clock'
 import { hasRoom, requestRoute } from '../src/engine/routing'
 import { buildTimetable, isLevelComplete } from '../src/engine/scheduler'
 import { createInitialState, step } from '../src/engine/simulation'
-import { buildGraph, getEdge, locateOnPath, nextSteps } from '../src/engine/trackGraph'
+import { buildGraph, getEdge, locateOnPath, nextSteps, turnDegrees } from '../src/engine/trackGraph'
 import type { GameState, TrackPosition } from '../src/engine/types'
 import { graph1 as graph, level1 as level, route, runUntil } from './helpers'
 
@@ -110,6 +110,17 @@ describe('level 1', () => {
     expect(again).toMatchObject({ ok: false, reason: 'wrong-destination' })
     expect(again.ok || again.state!.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(dueAtS - 6 * 60)
   })
+  it('never sends a work train down one leg of the wye and back up the other', () => {
+    for (let seed = 0; seed < 200; seed++) {
+      const base = createInitialState(graph, seed)
+      const firstS = Math.min(...Object.values(base.timetable).map((t) => t.appearsAtS))
+      const w = step(graph, { ...base, trains: [], reservations: {}, timeS: firstS - 20 * 60 }, 0.1).trains.find((t) => t.work)!
+      const ids = w.path.map((s) => s.edgeId).join(',')
+      expect(ids).not.toMatch(/SPUR_W,SPUR_E|SPUR_E,SPUR_W/)
+      for (let i = 1; i < w.path.length; i++) expect(turnDegrees(graph, w.path[i - 1], w.path[i])).toBeLessThanOrEqual(60)
+    }
+  })
+
   it('sends work trains along random routes that always end at a terminal', () => {
     const terminals = new Set([...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id))
     const routes = new Set<string>()
@@ -220,6 +231,10 @@ describe('level 1', () => {
   })
 
   it('plays the written timetable through on time with meets in sidings C and D', () => {
+    // The dispatched timetable alone: a 5 mph work train would hold the line for most of an hour.
+    const graph = buildGraph({ ...level, workTrains: false })
+    const routeWhenClear = (state: GameState, trainId: string, target: TrackPosition) =>
+      route(graph, runUntil(graph, state, (s) => requestRoute(graph, s, trainId, target).ok), trainId, target)
     let state = createInitialState(graph)
 
     // The locals head home: L1 from siding A and L3 from siding B go west, L2 from siding D east.

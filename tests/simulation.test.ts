@@ -175,11 +175,11 @@ describe('work trains', () => {
   const quiet = buildGraph({ ...level, workTrains: true, startingTrains: [] })
   const workTrain = (s: GameState) => s.trains.find((t) => t.work)
 
-  it('sends a work train, labelled W, at half line speed, when nothing is due for 5 minutes', () => {
+  it('sends a work train, labelled W, at 5 mph, when nothing is due for 5 minutes', () => {
     const state = step(quiet, createInitialState(quiet, 1), 0.1)
     const w = workTrain(state)!
     expect(w).toMatchObject({ id: 'W', name: 'Work train', stopAtM: null })
-    expect(w.maxSpeedMps).toBe(Math.max(...level.schedule.map((e) => e.maxSpeedMps)) / 2)
+    expect(w.maxSpeedMps).toBeCloseTo(2.2352)
     expect(Object.values(state.reservations).every((holder) => holder === 'W')).toBe(true)
     expect(state.workTrainsSent).toBe(1)
   })

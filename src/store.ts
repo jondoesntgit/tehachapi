@@ -96,12 +96,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const terminal = train.path[0].direction === 1 ? first.from : first.to
       entryCounts[terminal] = (entryCounts[terminal] ?? 0) + 1
     }
-    // Say how each train that just cleared its terminal did.
-    const cleared = next.results.slice(game.results.length)
+    // Speak up only for trains that just cleared their terminal late; on-time ones show as chips.
+    const late = next.results.slice(game.results.length).filter((r) => r.lateMinutes > 0)
     const label = (nodeId: string) => graph.nodes.get(nodeId)?.label ?? nodeId
-    const arrivalMessage = cleared
-      .map((r) => `${r.trainId} reached ${label(r.exitedAt)} ${r.lateMinutes === 0 ? 'on time' : `${r.lateMinutes} min late`}`)
-      .join(' · ')
+    const arrivalMessage = late.map((r) => `${r.trainId} reached ${label(r.exitedAt)} ${r.lateMinutes} min late`).join(' · ')
     set({
       game: next,
       selectedTrainId: stillThere ? selectedTrainId : null,
