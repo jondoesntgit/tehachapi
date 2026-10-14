@@ -4,7 +4,7 @@ import { hasRoom, requestRoute } from '../src/engine/routing'
 import { buildTimetable, isLevelComplete } from '../src/engine/scheduler'
 import { createInitialState, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, nextSteps, turnDegrees } from '../src/engine/trackGraph'
-import type { GameState, TrackPosition } from '../src/engine/types'
+import type { GameState, RouteStep, TrackPosition } from '../src/engine/types'
 import { graph1 as graph, level1 as level, route, runUntil } from './helpers'
 
 const EAST_EXIT = { edgeId: 'M9', offsetM: 700 }
@@ -35,7 +35,7 @@ describe('level 1', () => {
     const t13 = level.schedule.find((e) => e.id === 'T13')!
     expect([t13.entry, t13.destination]).toEqual(['SOUTHEAST', 'WEST'])
     // T13 alone on the board.
-    const alone = buildGraph({ ...level, schedule: [t13], startingTrains: [] })
+    const alone = buildGraph({ ...level, schedule: [t13], startingTrains: [], workTrains: false })
     const at = runUntil(alone, createInitialState(alone), (s) => s.trains.some((t) => t.id === 'T13'))
     const routed = route(alone, at, 'T13', WEST_EXIT)
     const path = routed.trains.find((t) => t.id === 'T13')!.path.map((s) => s.edgeId)
@@ -110,31 +110,38 @@ describe('level 1', () => {
     expect(again).toMatchObject({ ok: false, reason: 'wrong-destination' })
     expect(again.ok || again.state!.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(dueAtS - 6 * 60)
   })
-  it('never sends a work train down one leg of the wye and back up the other', () => {
-    for (let seed = 0; seed < 200; seed++) {
-      const base = createInitialState(graph, seed)
-      const firstS = Math.min(...Object.values(base.timetable).map((t) => t.appearsAtS))
-      const w = step(graph, { ...base, trains: [], reservations: {}, timeS: firstS - 20 * 60 }, 0.1).trains.find((t) => t.work)!
-      const ids = w.path.map((s) => s.edgeId).join(',')
-      expect(ids).not.toMatch(/SPUR_W,SPUR_E|SPUR_E,SPUR_W/)
-      for (let i = 1; i < w.path.length; i++) expect(turnDegrees(graph, w.path[i - 1], w.path[i])).toBeLessThanOrEqual(60)
-    }
+  // Level 1's track with no other traffic until noon, so nothing gets in a work train's way.
+  const empty = buildGraph({
+    ...level,
+    startingTrains: [],
+    schedule: [{ ...level.schedule[0], appearsAt: '12:00', appearsBetween: undefined, dueAt: '12:20' }],
   })
 
-  it('sends work trains along random routes that always end at a terminal', () => {
-    const terminals = new Set([...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id))
+  /** Every block a work train takes from entering to clearing its terminal. */
+  const workTrainRun = (seed: number) => {
+    let state = step(empty, createInitialState(empty, seed), 0.1)
+    const w = state.trains.find((t) => t.work)!
+    const taken: RouteStep[] = []
+    // Follow this one train out; on an empty board another follows as soon as it's gone.
+    while (state.trains.some((t) => t.work) && state.workTrainsSent === 1) {
+      for (const s of state.trains.find((t) => t.work)!.path) {
+        if (!taken.some((t) => t.edgeId === s.edgeId && t.direction === s.direction)) taken.push(s)
+      }
+      state = step(empty, state, 0.1)
+    }
+    return { destination: w.destination, taken }
+  }
+
+  it('sends work trains on random routes out through a terminal, never down one leg of the wye and back up the other', () => {
     const routes = new Set<string>()
-    for (let seed = 0; seed < 40; seed++) {
-      // Board cleared, next train far off: a work train goes out.
-      const base = createInitialState(graph, seed)
-      const firstS = Math.min(...Object.values(base.timetable).map((t) => t.appearsAtS))
-      const empty = { ...base, trains: [], reservations: {}, timeS: firstS - 20 * 60 }
-      const w = step(graph, empty, 0.1).trains.find((t) => t.work)!
-      const last = w.path[w.path.length - 1]
-      const exit = getEdge(graph, last.edgeId)[last.direction === 1 ? 'to' : 'from']
-      expect(terminals.has(exit)).toBe(true)
-      expect(exit).toBe(w.destination)
-      routes.add(w.path.map((s) => s.edgeId).join(','))
+    for (let seed = 0; seed < 25; seed++) {
+      const { destination, taken } = workTrainRun(seed)
+      const last = taken[taken.length - 1]
+      expect(getEdge(graph, last.edgeId)[last.direction === 1 ? 'to' : 'from']).toBe(destination)
+      const ids = taken.map((s) => s.edgeId).join(',')
+      expect(ids).not.toMatch(/SPUR_W,SPUR_E|SPUR_E,SPUR_W/)
+      for (let i = 1; i < taken.length; i++) expect(turnDegrees(graph, taken[i - 1], taken[i])).toBeLessThanOrEqual(60)
+      routes.add(ids)
     }
     expect(routes.size).toBeGreaterThan(5)
   })
@@ -231,7 +238,7 @@ describe('level 1', () => {
   })
 
   it('plays the written timetable through on time with meets in sidings C and D', () => {
-    // The dispatched timetable alone: a 5 mph work train would hold the line for most of an hour.
+    // The dispatched timetable alone: this fixed script can't steer round a work train in its way.
     const graph = buildGraph({ ...level, workTrains: false })
     const routeWhenClear = (state: GameState, trainId: string, target: TrackPosition) =>
       route(graph, runUntil(graph, state, (s) => requestRoute(graph, s, trainId, target).ok), trainId, target)

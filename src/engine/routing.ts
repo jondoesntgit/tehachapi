@@ -25,6 +25,8 @@ export type RouteFailure =
   | 'departing'
   /** From the target the train could only leave through a terminal other than its destination. */
   | 'wrong-destination'
+  /** Work trains find their own way. */
+  | 'work-train'
 
 export type RouteResult =
   | { ok: true; state: GameState }
@@ -165,6 +167,7 @@ export function requestRoute(
 ): RouteResult {
   const train = state.trains.find((t) => t.id === trainId)
   if (!train) return { ok: false, reason: 'no-path' }
+  if (train.work) return { ok: false, reason: 'work-train' }
   if (train.stopAtM === null) return { ok: false, reason: 'departing' }
 
   const head = locateStep(graph, train.path, train.headM)

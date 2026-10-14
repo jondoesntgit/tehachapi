@@ -1,7 +1,7 @@
 import { parseClock } from './clock'
 import { safeSpeed } from './physics'
 import { STOP_CLEARANCE_M } from './routing'
-import { getEdge, nextSteps, stepEndNode, turnDegrees, type TrackGraph } from './trackGraph'
+import { getEdge, locateStep, nextSteps, pathLength, stepEndNode, turnDegrees, type TrackGraph } from './trackGraph'
 import { seededRandom } from './random'
 import type { GameState, RouteStep, ScheduleEntry, TimetableEntry, Train, TrainResult } from './types'
 
@@ -141,8 +141,8 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
 
 /** A work train goes out only when nothing is on the board or due for this long. */
 export const WORK_TRAIN_CLEAR_S = 5 * 60
-/** Work trains crawl along at 5 mph. */
-export const WORK_TRAIN_SPEED_MPS = 5 * 0.44704
+/** Work trains run at 15 mph. */
+export const WORK_TRAIN_SPEED_MPS = 15 * 0.44704
 /**
  * Work trains never turn through more than this at a node. It keeps them off the acute turn at the
  * bottom of a wye (down one leg and straight back up the other, ~70°), while sidings (~30°) and the
@@ -172,24 +172,9 @@ function gentlyReaches(graph: TrackGraph, step: RouteStep, terminalId: string): 
 }
 
 /**
- * Steps from `from` to `destination`, choosing at random at each facing switch among the ways that
- * still get there without a sharp turn.
- */
-export function randomRoute(graph: TrackGraph, from: RouteStep, destination: string, random: () => number): RouteStep[] {
-  const path = [from]
-  for (let current = from; stepEndNode(getEdge(graph, current.edgeId), current.direction) !== destination; ) {
-    const options = gentleSteps(graph, current).filter((step) => gentlyReaches(graph, step, destination))
-    if (options.length === 0 || path.length > graph.edges.size) break
-    current = options[Math.floor(random() * options.length)]
-    path.push(current)
-  }
-  return path
-}
-
-/**
  * When the board is empty and no scheduled train is due for `WORK_TRAIN_CLEAR_S`, sends a work train
- * in at a random terminal along a random route out through another, at 5 mph. It holds
- * its whole route, so scheduled trains that come up meanwhile may wait at their portal.
+ * in at a random terminal, bound for another, at `WORK_TRAIN_SPEED_MPS`. It holds only its entry
+ * block at first; `extendWorkTrains` grants it one block ahead at a time.
  */
 export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
   if (!graph.level.workTrains || state.trains.length > 0 || state.pending.length === 0) return state
@@ -200,28 +185,61 @@ export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
   const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
   const entry = terminals[Math.floor(random() * terminals.length)]
   const first = entryStep(graph, entry)
+  if (state.reservations[first.edgeId] !== undefined) return state
   const exits = terminals.filter((id) => id !== entry && gentlyReaches(graph, first, id))
   if (exits.length === 0) return state
-  const destination = exits[Math.floor(random() * exits.length)]
-  const path = randomRoute(graph, first, destination, random)
 
-  const speedMps = WORK_TRAIN_SPEED_MPS
   const train: Train = {
     id: WORK_TRAIN_ID,
     name: 'Work train',
-    maxSpeedMps: speedMps,
-    destination,
+    maxSpeedMps: WORK_TRAIN_SPEED_MPS,
+    destination: exits[Math.floor(random() * exits.length)],
     dueAtS: state.timeS,
-    speedMps,
-    path,
+    speedMps: 0,
+    path: [first],
     headM: 0,
-    stopAtM: null,
+    stopAtM: workStop(graph, [first]),
     arrivedAtS: null,
     work: true,
   }
-  const reservations = { ...state.reservations }
-  for (const step of path) reservations[step.edgeId] = WORK_TRAIN_ID
-  return { ...state, trains: [...state.trains, train], reservations, workTrainsSent: state.workTrainsSent + 1 }
+  return {
+    ...state,
+    trains: [...state.trains, train],
+    reservations: { ...state.reservations, [first.edgeId]: WORK_TRAIN_ID },
+    workTrainsSent: state.workTrainsSent + 1,
+  }
+}
+
+/** Where a work train holding `path` must stop: short of the far switch, or nowhere if it ends at a terminal. */
+function workStop(graph: TrackGraph, path: RouteStep[]): number | null {
+  const last = path[path.length - 1]
+  const edge = getEdge(graph, last.edgeId)
+  if (graph.nodes.get(stepEndNode(edge, last.direction))?.kind === 'terminal') return null
+  return pathLength(graph, path) - Math.min(STOP_CLEARANCE_M, edge.lengthM / 2)
+}
+
+/**
+ * A work train holds the block its head is in and the next one. When its head reaches the last block
+ * it holds, it takes one more: a random choice among the gentle turns that still reach its
+ * destination and aren't held by another train. If none is free it pulls up and waits.
+ */
+export function extendWorkTrains(graph: TrackGraph, state: GameState): GameState {
+  let { trains, reservations } = state
+  for (const train of state.trains) {
+    if (!train.work || train.stopAtM === null) continue
+    if (locateStep(graph, train.path, train.headM).index < train.path.length - 1) continue
+    const last = train.path[train.path.length - 1]
+    const options = gentleSteps(graph, last).filter(
+      (step) => gentlyReaches(graph, step, train.destination) && (reservations[step.edgeId] ?? train.id) === train.id,
+    )
+    if (options.length === 0) continue
+    const random = seededRandom((state.seed ^ 0x3017) + state.workTrainsSent * 7919 + train.path.length * 104729)
+    const path = [...train.path, options[Math.floor(random() * options.length)]]
+    const extended: Train = { ...train, path, stopAtM: workStop(graph, path) }
+    trains = trains.map((t) => (t.id === train.id ? extended : t))
+    reservations = { ...reservations, [path[path.length - 1].edgeId]: train.id }
+  }
+  return trains === state.trains ? state : { ...state, trains, reservations }
 }
 
 /** Minutes added to the late total when the game ends in a deadlock. */

@@ -76,7 +76,7 @@ export function Help({ onClose }: { onClose: () => void }) {
               Trains cannot reverse. A route takes a siding by itself when the main is held, and is refused if
               another train is in the way or the train cannot stop in time. Sending a train where it could
               only leave by the wrong terminal is refused, and moves its due time 3 minutes earlier.
-              When nothing is due for 5 minutes, a work train (W) crawls through by itself at 5 mph. Your
+              When nothing is due for 5 minutes, a work train (W) runs through by itself at 15 mph, holding only the block it's in and the next. Your
               score at the end is 100, less every minute trains were late. If every train has entered and the ones on the board block each other with
               no way forward, the game ends and 90 minutes are added to the late total.
             </p>

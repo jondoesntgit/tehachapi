@@ -58,6 +58,8 @@ function failureMessage(
       return 'Train is already leaving'
     case 'no-path':
       return 'No route there — trains cannot reverse'
+    case 'work-train':
+      return 'Work trains find their own way'
     case 'wrong-destination': {
       const train = game.trains.find((t) => t.id === trainId)
       const where = train && (graph.nodes.get(train.destination)?.label ?? train.destination)

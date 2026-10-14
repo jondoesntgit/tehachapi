@@ -1,7 +1,15 @@
 import { parseClock } from './clock'
 import { advance } from './physics'
 import { isDeadlocked } from './routing'
-import { buildTimetable, nextArrivalS, placeStartingTrains, scoreArrival, spawnDue, spawnWorkTrain } from './scheduler'
+import {
+  buildTimetable,
+  extendWorkTrains,
+  nextArrivalS,
+  placeStartingTrains,
+  scoreArrival,
+  spawnDue,
+  spawnWorkTrain,
+} from './scheduler'
 import { getEdge, pathLength, stepEndNode, type TrackGraph } from './trackGraph'
 import type { GameState, Train } from './types'
 
@@ -26,8 +34,9 @@ export function createInitialState(graph: TrackGraph, seed?: number): GameState 
 }
 
 /** Advances the whole game by `dtS` game seconds. */
-export function step(graph: TrackGraph, state: GameState, dtS: number): GameState {
-  if (state.deadlocked) return state
+export function step(graph: TrackGraph, rawState: GameState, dtS: number): GameState {
+  if (rawState.deadlocked) return rawState
+  const state = extendWorkTrains(graph, rawState)
   const { trainLengthM, physics } = graph.level
   const timeS = state.timeS + dtS
   const reservations = { ...state.reservations }
