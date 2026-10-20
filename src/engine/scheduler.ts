@@ -1,9 +1,9 @@
 import { parseClock } from './clock'
 import { safeSpeed } from './physics'
-import { STOP_CLEARANCE_M } from './routing'
+import { canReach, STOP_CLEARANCE_M } from './routing'
 import { getEdge, locateStep, nextSteps, pathLength, stepEndNode, turnDegrees, type TrackGraph } from './trackGraph'
 import { seededRandom } from './random'
-import type { GameState, RouteStep, ScheduleEntry, TimetableEntry, Train, TrainResult } from './types'
+import type { Direction, GameState, RouteStep, ScheduleEntry, TimetableEntry, Train, TrainResult } from './types'
 
 export function getScheduleEntry(graph: TrackGraph, id: string): ScheduleEntry {
   const entry = graph.level.schedule.find((e) => e.id === id)
@@ -99,7 +99,8 @@ export function spawnDue(graph: TrackGraph, state: GameState): GameState {
 /**
  * Trains already standing on the track at the start of the level, each held on its own edge with
  * the head `STOP_CLEARANCE_M` short of the far end, waiting for the dispatcher. With a seed, a train
- * with `edgeChoices` stands on a random one of them not already taken; without, on its `edge`.
+ * with `edgeChoices` stands on a random one of them not already taken, facing whichever way reaches
+ * its destination (its written `direction` if both do); without, on its `edge` as written.
  */
 export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<GameState, 'trains' | 'reservations'> {
   const { trainLengthM } = graph.level
@@ -108,11 +109,20 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
   const trains: Train[] = []
   const reservations: Record<string, string> = {}
   for (const start of graph.level.startingTrains ?? []) {
+    // Face the train the way that reaches its destination, preferring the written direction.
+    const facing = (id: string): Direction | null => {
+      for (const direction of [start.direction, -start.direction as Direction]) {
+        if (canReach(graph, { edgeId: id, direction }, start.destination)) return direction
+      }
+      return null
+    }
     let edgeId = start.edge
+    let direction = start.direction
     if (random && start.edgeChoices) {
-      const free = start.edgeChoices.filter((id) => reservations[id] === undefined)
+      const free = start.edgeChoices.filter((id) => reservations[id] === undefined && facing(id) !== null)
       if (free.length === 0) throw new Error(`Starting train "${start.id}" has no free edge to stand on`)
       edgeId = free[Math.floor(random() * free.length)]
+      direction = facing(edgeId)!
     }
     const edge = getEdge(graph, edgeId)
     if (reservations[edge.id] !== undefined) {
@@ -129,7 +139,7 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
       destination: start.destination,
       dueAtS: parseClock(start.dueAt),
       speedMps: 0,
-      path: [{ edgeId: edge.id, direction: start.direction }],
+      path: [{ edgeId: edge.id, direction }],
       headM,
       stopAtM: headM,
       arrivedAtS: null,

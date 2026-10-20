@@ -1,6 +1,6 @@
 {
   "id": "level-01",
-  "title": "Single Track with Four Sidings",
+  "title": "Single Track with Two Branches",
   "startTime": "09:53",
   "trainLengthM": 400,
   "physics": { "accelMps2": 0.25, "decelMps2": 0.35, "stopMarginM": 5 },
@@ -10,6 +10,12 @@
     { "id": "WEST",  "x": 0,    "y": 0, "kind": "terminal", "label": "West Terminal", "color": "#ff9640" },
     { "id": "SW_A1", "x": 700,  "y": 0, "kind": "switch" },
     { "id": "SW_A2", "x": 1300, "y": 0, "kind": "switch" },
+    { "id": "SW_W",  "x": 1800, "y": 0, "kind": "switch" },
+    { "id": "SW_Q1", "x": 1400, "y": 180, "kind": "switch" },
+    { "id": "SW_Q2", "x": 900, "y": 180, "kind": "switch" },
+    { "id": "SW_Q3", "x": 700, "y": 180, "kind": "switch" },
+    { "id": "SW_Q4", "x": 200, "y": 180, "kind": "switch" },
+    { "id": "SOUTHWEST", "x": 0, "y": 180, "kind": "terminal", "label": "SW Terminal", "color": "#f472d0" },
     { "id": "SW_B1", "x": 2000, "y": 0, "kind": "switch" },
     { "id": "SW_B2", "x": 2600, "y": 0, "kind": "switch" },
     { "id": "SW_SW", "x": 2800, "y": 0, "kind": "switch" },
@@ -27,7 +33,15 @@
   "edges": [
     { "id": "M1", "from": "WEST",  "to": "SW_A1" },
     { "id": "M2", "from": "SW_A1", "to": "SW_A2" },
-    { "id": "M3", "from": "SW_A2", "to": "SW_B1" },
+    { "id": "M3", "from": "SW_A2", "to": "SW_W" },
+    { "id": "M3E", "from": "SW_W", "to": "SW_B1" },
+    { "id": "SW1", "from": "SW_W", "to": "SW_Q1", "points": [[1700, 40], [1600, 140], [1540, 180]], "branch": "SOUTHWEST" },
+    { "id": "SW2", "from": "SW_Q1", "to": "SW_Q2", "branch": "SOUTHWEST" },
+    { "id": "SW_SIDING1", "from": "SW_Q1", "to": "SW_Q2", "points": [[1300, 120], [1000, 120]], "branch": "SOUTHWEST" },
+    { "id": "SW3", "from": "SW_Q2", "to": "SW_Q3", "branch": "SOUTHWEST" },
+    { "id": "SW4", "from": "SW_Q3", "to": "SW_Q4", "branch": "SOUTHWEST" },
+    { "id": "SW_SIDING2", "from": "SW_Q3", "to": "SW_Q4", "points": [[600, 120], [300, 120]], "branch": "SOUTHWEST" },
+    { "id": "SW5", "from": "SW_Q4", "to": "SOUTHWEST", "branch": "SOUTHWEST" },
     { "id": "M4", "from": "SW_B1", "to": "SW_B2" },
     { "id": "M5", "from": "SW_B2", "to": "SW_SW" },
     { "id": "M5M", "from": "SW_SW", "to": "SW_SE" },
@@ -48,22 +62,23 @@
     { "id": "SE3", "from": "SW_E2", "to": "SOUTHEAST", "branch": "SOUTHEAST" }
   ],
   "labels": [
-    { "text": "to SE-Terminal", "x": 3120, "y": 150, "color": "#ffdc3c" }
+    { "text": "to SE-Terminal", "x": 3120, "y": 150, "color": "#ffdc3c" },
+    { "text": "to SW Terminal", "x": 1850, "y": 120, "color": "#f472d0" }
   ],
   "startingTrains": [
     {
       "id": "L1", "name": "Westbound Local 11",
-      "edge": "SIDING_A", "direction": -1,
+      "edge": "SIDING_A", "edgeChoices": ["SIDING_A", "SIDING_B", "SIDING_C", "SIDING_D", "SE_LOOP", "SW_SIDING1", "SW_SIDING2"], "direction": -1,
       "maxSpeedMps": 12, "destination": "WEST", "dueAt": "10:10"
     },
     {
       "id": "L2", "name": "Eastbound Local 12",
-      "edge": "SIDING_D", "edgeChoices": ["SIDING_B", "SIDING_C", "SIDING_D"], "direction": 1,
+      "edge": "SIDING_D", "edgeChoices": ["SIDING_A", "SIDING_B", "SIDING_C", "SIDING_D", "SE_LOOP", "SW_SIDING1", "SW_SIDING2"], "direction": 1,
       "maxSpeedMps": 12, "destination": "EAST", "dueAt": "10:12"
     },
     {
       "id": "L3", "name": "Westbound Local 13",
-      "edge": "SIDING_B", "edgeChoices": ["SIDING_B", "SIDING_C", "SIDING_D"], "direction": -1,
+      "edge": "SIDING_B", "edgeChoices": ["SIDING_A", "SIDING_B", "SIDING_C", "SIDING_D", "SE_LOOP", "SW_SIDING1", "SW_SIDING2"], "direction": -1,
       "maxSpeedMps": 12, "destination": "WEST", "dueAt": "10:18"
     }
   ],
@@ -132,6 +147,16 @@
       "id": "T13", "name": "Westbound Freight 113",
       "appearsAt": "11:40", "appearsBetween": ["10:45", "11:40"], "entry": "SOUTHEAST",
       "maxSpeedMps": 15, "destination": "WEST", "dueAt": "12:00"
+    },
+    {
+      "id": "T14", "name": "SW Freight 114",
+      "appearsAt": "11:45", "appearsBetween": ["10:20", "11:45"], "entry": "EAST",
+      "maxSpeedMps": 15, "destination": "SOUTHWEST", "dueAt": "12:05"
+    },
+    {
+      "id": "T15", "name": "Eastbound Local 115",
+      "appearsAt": "11:55", "appearsBetween": ["10:30", "11:55"], "entry": "SOUTHWEST",
+      "maxSpeedMps": 15, "destination": "EAST", "dueAt": "12:15"
     }
   ]
 }
