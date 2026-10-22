@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
 import { heldAtPortal, isLevelComplete, lateTotal, levelScore } from '../src/engine/scheduler'
-import { isDeadlocked, requestRoute } from '../src/engine/routing'
+import { isDeadlocked } from '../src/engine/routing'
 import { createInitialState, skipToNextArrival, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, type TrackGraph } from '../src/engine/trackGraph'
 import type { GameState } from '../src/engine/types'
@@ -175,11 +175,11 @@ describe('work trains', () => {
   const quiet = buildGraph({ ...level, workTrains: true, startingTrains: [] })
   const workTrain = (s: GameState) => s.trains.find((t) => t.work)
 
-  it('sends a work train, labelled W, at 15 mph, when nothing is due for 5 minutes', () => {
+  it('sends a work train, labelled W, at 7.5 mph, when nothing is due for 5 minutes', () => {
     const state = step(quiet, createInitialState(quiet, 1), 0.1)
     const w = workTrain(state)!
     expect(w).toMatchObject({ id: 'W', name: 'Work train' })
-    expect(w.maxSpeedMps).toBeCloseTo(6.7056)
+    expect(w.maxSpeedMps).toBeCloseTo(3.3528)
     expect(state.workTrainsSent).toBe(1)
   })
 
@@ -198,14 +198,31 @@ describe('work trains', () => {
     }
   })
 
-  it("runs out through a terminal on its own, can't be dispatched, and is not scored", () => {
-    let state = step(quiet, createInitialState(quiet, 1), 0.1)
-    expect(requestRoute(quiet, state, 'W', { edgeId: 'M3', offsetM: 100 })).toMatchObject({ reason: 'work-train' })
-    state = runUntil(quiet, state, (s) => !workTrain(s))
+  it('runs out through a terminal on its own and is not scored', () => {
+    // Nothing else until noon, so nothing gets in its way.
+    const roomy = buildGraph({ ...quiet.level, schedule: [{ ...level.schedule[0], appearsAt: '12:00', dueAt: '12:20' }] })
+    let state = step(roomy, createInitialState(roomy, 1), 0.1)
+    state = runUntil(roomy, state, (s) => !workTrain(s))
     expect(state.results).toEqual([])
     expect(Object.values(state.reservations)).not.toContain('W')
   })
 
+  it('can be taken over by the dispatcher, and then stops choosing its own blocks', () => {
+    let state = step(quiet, createInitialState(quiet, 1), 0.1)
+    const w = workTrain(state)!
+    // Send it to the far end of the block after its entry block, whichever end it came in at.
+    const target = w.path[0].edgeId === 'M1' ? { edgeId: 'M2', offsetM: 600 } : { edgeId: 'M4', offsetM: 600 }
+    state = route(quiet, state, 'W', target)
+    expect(workTrain(state)).toMatchObject({ dispatched: true })
+    state = runUntil(quiet, state, (s) => workTrain(s)!.speedMps === 0 && workTrain(s)!.headM > 100)
+    const stopped = workTrain(state)!
+    expect(locateOnPath(quiet, stopped.path, stopped.stopAtM!).edgeId).toBe(target.edgeId)
+    expect(stopped.path.at(-1)!.edgeId).toBe(target.edgeId)
+    // Left alone, it stays put: it no longer claims blocks for itself.
+    const later = runUntil(quiet, state, (s) => s.timeS >= state.timeS + 120)
+    expect(workTrain(later)!.path).toEqual(stopped.path)
+    expect(workTrain(later)!.headM).toBe(stopped.headM)
+  })
   it('waits for a block held by another train, then carries on', () => {
     const state = step(quiet, createInitialState(quiet, 1), 0.1)
     const w = workTrain(state)!

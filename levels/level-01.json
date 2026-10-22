@@ -157,6 +157,21 @@
       "id": "T15", "name": "Eastbound Local 115",
       "appearsAt": "11:55", "appearsBetween": ["10:30", "11:55"], "entry": "SOUTHWEST",
       "maxSpeedMps": 15, "destination": "EAST", "dueAt": "12:15"
+    },
+    {
+      "id": "T16", "name": "Westbound Mixed 116",
+      "appearsAt": "10:22", "appearsBetween": ["09:55", "10:53"], "entry": "EAST",
+      "maxSpeedMps": 18, "destination": "WEST", "dueAt": "10:42"
+    },
+    {
+      "id": "T17", "name": "SE Transfer 117",
+      "appearsAt": "10:25", "appearsBetween": ["09:55", "10:53"], "entry": "SOUTHWEST",
+      "maxSpeedMps": 15, "destination": "SOUTHEAST", "dueAt": "10:45"
+    },
+    {
+      "id": "T18", "name": "SW Transfer 118",
+      "appearsAt": "10:30", "appearsBetween": ["09:55", "10:53"], "entry": "SOUTHEAST",
+      "maxSpeedMps": 15, "destination": "SOUTHWEST", "dueAt": "10:52"
     }
   ]
 }

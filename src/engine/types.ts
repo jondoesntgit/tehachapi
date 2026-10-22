@@ -137,8 +137,10 @@ export interface Train {
   stopAtM: number | null
   /** Game time the head reached the exit terminal, once it has. */
   arrivedAtS: number | null
-  /** A work train: sent by the game along a random route, not dispatched or scored. */
+  /** A work train: sent by the game, finding its own way until the dispatcher routes it; not scored. */
   work?: boolean
+  /** A work train the dispatcher has routed; it no longer picks its own blocks. */
+  dispatched?: boolean
 }
 
 export interface TrainResult {

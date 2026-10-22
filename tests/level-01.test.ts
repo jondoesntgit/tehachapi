@@ -28,7 +28,7 @@ describe('level 1', () => {
       expect(lengthM).toBeGreaterThanOrEqual(level.trainLengthM + 40)
       expect(lengthM).toBeLessThan(700)
     }
-    expect(level.schedule).toHaveLength(15)
+    expect(level.schedule).toHaveLength(18)
     expect(level.startingTrains).toHaveLength(3)
   })
 
@@ -58,6 +58,7 @@ describe('level 1', () => {
   it('brings a train up from Southeast and lets it head east', () => {
     const t12 = level.schedule.find((e) => e.id === 'T12')!
     expect([t12.entry, t12.destination]).toEqual(['SOUTHEAST', 'EAST'])
+    const graph = buildGraph({ ...level, schedule: [t12], startingTrains: [], workTrains: false })
     let state = runUntil(graph, createInitialState(graph), has('T12'))
     expect(state.trains.find((t) => t.id === 'T12')!.path[0]).toEqual({ edgeId: 'SE3', direction: -1 })
     // Nobody has dispatched T2, which holds the east entry, so stop T12 short of it.
@@ -81,6 +82,8 @@ describe('level 1', () => {
   })
 
   it('stops a train from the SE-Terminal in the first block, short of the passing siding', () => {
+    const entry = level.schedule.find((e) => e.id === 'T12')!
+    const graph = buildGraph({ ...level, schedule: [entry], startingTrains: [], workTrains: false })
     let state = runUntil(graph, createInitialState(graph), has('T12'))
     state = runUntil(graph, state, (s) => s.trains.find((t) => t.id === 'T12')!.speedMps === 0)
     const t12 = state.trains.find((t) => t.id === 'T12')!
@@ -162,6 +165,7 @@ describe('level 1', () => {
       T10: ['10:00', '11:00'], T11: ['10:30', '11:30'], T12: ['10:30', '11:15'],
       T13: ['10:45', '11:40'],
       T14: ['10:20', '11:45'], T15: ['10:30', '11:55'],
+      T16: ['09:55', '10:53'], T17: ['09:55', '10:53'], T18: ['09:55', '10:53'],
     }
     const seen: Record<string, Set<number>> = {}
     for (let seed = 0; seed < 200; seed++) {
@@ -188,7 +192,7 @@ describe('level 1', () => {
 
   it('sends two trains, entering from the west, to the SE-Terminal', () => {
     const south = level.schedule.filter((e) => e.destination === 'SOUTHEAST')
-    expect(south.map((e) => [e.id, e.entry])).toEqual([['T10', 'WEST'], ['T11', 'WEST']])
+    expect(south.map((e) => [e.id, e.entry])).toEqual([['T10', 'WEST'], ['T11', 'WEST'], ['T17', 'SOUTHWEST']])
     expect(graph.nodes.get('SOUTHEAST')?.color).toBeDefined()
   })
 
@@ -288,9 +292,16 @@ describe('level 1', () => {
     state = runUntil(graph, state, has('T10'))
     state = routeWhenClear(state, 'T10', SOUTHEAST_EXIT)
 
-    // T12 comes up from South once T10 is down, and turns east up the wye's east leg.
+    // In the lull: T16 runs east to west; T17 crosses from SW Terminal to the SE-Terminal; T18 crosses back.
+    state = runUntil(graph, state, has('T16'))
+    state = routeWhenClear(state, 'T16', WEST_EXIT)
+    state = runUntil(graph, state, has('T17'))
+    state = routeWhenClear(state, 'T17', SOUTHEAST_EXIT)
+    // T12 is listed first, so it comes up from the SE-Terminal ahead of T18 and heads east.
     state = runUntil(graph, state, has('T12'))
     state = routeWhenClear(state, 'T12', EAST_EXIT)
+    state = runUntil(graph, state, has('T18'))
+    state = routeWhenClear(state, 'T18', SOUTHWEST_EXIT)
 
     // Express T4 follows T2 west; local T5 waits in siding D for freight T6, then runs east.
     state = runUntil(graph, state, has('T4'))
@@ -325,7 +336,7 @@ describe('level 1', () => {
     state = runUntil(graph, state, isLevelComplete)
 
     expect(state.results.map((r) => r.trainId).sort()).toEqual([
-      'L1', 'L2', 'L3', 'T1', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
+      'L1', 'L2', 'L3', 'T1', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16', 'T17', 'T18', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
     ])
     expect(state.results.every((r) => r.reachedDestination)).toBe(true)
     expect(state.results.filter((r) => r.lateMinutes > 0)).toEqual([])

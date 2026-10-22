@@ -151,8 +151,8 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
 
 /** A work train goes out only when nothing is on the board or due for this long. */
 export const WORK_TRAIN_CLEAR_S = 5 * 60
-/** Work trains run at 15 mph. */
-export const WORK_TRAIN_SPEED_MPS = 15 * 0.44704
+/** Work trains run at 7.5 mph. */
+export const WORK_TRAIN_SPEED_MPS = 7.5 * 0.44704
 /**
  * Work trains never turn through more than this at a node. It keeps them off the acute turn at the
  * bottom of a wye (down one leg and straight back up the other, ~70°), while sidings (~30°) and the
@@ -236,7 +236,7 @@ function workStop(graph: TrackGraph, path: RouteStep[]): number | null {
 export function extendWorkTrains(graph: TrackGraph, state: GameState): GameState {
   let { trains, reservations } = state
   for (const train of state.trains) {
-    if (!train.work || train.stopAtM === null) continue
+    if (!train.work || train.dispatched || train.stopAtM === null) continue
     if (locateStep(graph, train.path, train.headM).index < train.path.length - 1) continue
     const last = train.path[train.path.length - 1]
     const options = gentleSteps(graph, last).filter(
