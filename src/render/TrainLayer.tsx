@@ -1,7 +1,7 @@
 import { locateOnPath, getEdge, pathPolyline, pointAt } from '../engine/trackGraph'
 import { useGameStore } from '../store'
 import type { CSSProperties } from 'react'
-import { destinationColor, LABEL_SIZE, pointsAttr, toView, WORK_TRAIN_COLOR } from './view'
+import { LABEL_SIZE, pointsAttr, toView, trainColor } from './view'
 
 export function TrainLayer() {
   const graph = useGameStore((s) => s.graph)
@@ -22,7 +22,7 @@ export function TrainLayer() {
             {stopAt && <circle className="stop-marker" cx={stopAt.x} cy={stopAt.y} r={45} />}
             <polyline
               className={selected ? 'train train-selected' : 'train'}
-              style={{ '--train-color': train.work ? WORK_TRAIN_COLOR : destinationColor(graph, train.destination) } as CSSProperties}
+              style={{ '--train-color': trainColor(graph, train) } as CSSProperties}
               points={pointsAttr(body)}
             />
             <text className="label train-label" x={head.x} y={head.y - 90} fontSize={LABEL_SIZE} textAnchor="middle">

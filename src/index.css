@@ -64,7 +64,8 @@ body,
 }
 
 .track-reserved {
-  stroke: var(--reserved);
+  /* --route-color is the train's own color, set per route. */
+  stroke: var(--route-color, var(--reserved));
   /* RESERVED_STROKE_PX in TrackLayer.tsx. */
   stroke-width: 4;
 }

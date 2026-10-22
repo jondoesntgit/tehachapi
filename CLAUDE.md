@@ -70,7 +70,7 @@ src/
     simulation.ts    # createInitialState(graph, seed?), step(graph, state, dtS), skipToNextArrival
   render/            # React components that only READ engine state
     view.ts          # World -> view mapping (Y_SCALE), viewBox
-    TrackLayer.tsx   # <polyline> per edge; green when reserved
+    TrackLayer.tsx   # <polyline> per edge; each cleared route drawn in its train's color
     TrainLayer.tsx   # Thick <polyline> per train body in its destination's color, label, stop marker
     Hud.tsx          # Clock, speed buttons, train list, messages, level-complete panel
   (index.css)        # The map sits between the top bar and the train list so neither covers track
@@ -100,7 +100,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Stop target:** `stopAtM`, measured like `headM`. `null` means the train is leaving: it runs off the end of its path through a terminal.
 - **Routes** (`requestRoute`):
   - The shortest path that avoids edges reserved by other trains wins, so a train takes a siding by itself when the main is held.
-  - On success, every edge in the train's path is reserved by it (`GameState.reservations`). Reserved edges render green.
+  - On success, every edge in the train's path is reserved by it (`GameState.reservations`). Reserved edges render in the color of the train holding them.
   - A train pulls up to the far end of the tapped edge (block), `STOP_CLEARANCE_M` (20 m) short of the switch, wherever in it the tap landed, so the block behind it is clear and a stopped train never fouls a switch (`resolveStop`).
   - A train never stops in a block too short to hold it clear of both switches (`hasRoom`: `trainLengthM + 2 × STOP_CLEARANCE_M`); `roomAhead` runs it on to the nearest block ahead with room that still leads to its destination.
   - Each end of track always has room to clear arriving trains: a target anywhere in a block that ends at a terminal becomes an exit. The store shows a message when a train clears its terminal late (on-time arrivals show only as chips).

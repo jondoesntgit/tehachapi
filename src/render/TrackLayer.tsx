@@ -2,9 +2,9 @@ import { getEdge, pathLength, pathPolyline, type TrackGraph } from '../engine/tr
 import type { CSSProperties } from 'react'
 import type { LevelNode, Vec2 } from '../engine/types'
 import { useGameStore } from '../store'
-import { LABEL_SIZE, pointsAttr, PX_PER_MM, toView, trimEnd, viewPointsAttr } from './view'
+import { LABEL_SIZE, pointsAttr, PX_PER_MM, toView, trainColor, trimEnd, viewPointsAttr } from './view'
 
-/** Clear screen space between the ends of two trains' green routes, so they never touch. */
+/** Clear screen space between the ends of two trains' routes, so they never touch. */
 const ROUTE_GAP_MM = 1
 /** Matches `.track-reserved` stroke-width. Each round cap pokes out half of it past its end point. */
 const RESERVED_STROKE_PX = 4
@@ -48,7 +48,13 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
         const trimmed = trimEnd(trimEnd(route, trimV).reverse(), trimV)
         return (
           trimmed.length > 1 && (
-            <polyline key={train.id} className="track track-reserved" points={viewPointsAttr(trimmed)} />
+            <polyline
+              key={train.id}
+              className="track track-reserved"
+              // The cleared route is drawn in the train's own color.
+              style={{ '--route-color': trainColor(graph, train) } as CSSProperties}
+              points={viewPointsAttr(trimmed)}
+            />
           )
         )
       })}

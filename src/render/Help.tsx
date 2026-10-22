@@ -15,7 +15,10 @@ const line = (className: string) => <polyline className={className} points="6,10
 
 const LEGEND: { swatch: ReactNode; text: string }[] = [
   { swatch: line('track'), text: 'Free track' },
-  { swatch: line('track track-reserved'), text: 'Track reserved for a train’s route' },
+  {
+    swatch: <polyline className="track track-reserved" style={{ '--route-color': 'var(--text)' } as CSSProperties} points="6,10 42,10" />,
+    text: 'Route cleared for a train, in that train’s color',
+  },
   { swatch: line('train train-selected'), text: 'Selected train' },
   { swatch: <circle className="stop-marker" cx={24} cy={10} r={7} />, text: 'Where the selected train will stop' },
   { swatch: <circle className="switch" cx={24} cy={10} r={4} />, text: 'Switch' },

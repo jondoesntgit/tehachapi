@@ -1,5 +1,5 @@
 import type { TrackGraph } from '../engine/trackGraph'
-import type { Vec2 } from '../engine/types'
+import type { Train, Vec2 } from '../engine/types'
 
 /**
  * The line is kilometres long but sidings sit only tens of metres off the main, so the view
@@ -65,3 +65,8 @@ export function destinationColor(graph: TrackGraph, destination: string): string
 
 /** Work trains aren't heading anywhere the dispatcher chose, so they get a neutral color. */
 export const WORK_TRAIN_COLOR = '#d7dee8'
+
+/** The color a train is drawn in: neutral for a work train, else its destination's color. */
+export function trainColor(graph: TrackGraph, train: Pick<Train, 'work' | 'destination'>): string | undefined {
+  return train.work ? WORK_TRAIN_COLOR : destinationColor(graph, train.destination)
+}
