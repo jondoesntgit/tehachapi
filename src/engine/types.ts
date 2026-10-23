@@ -139,12 +139,8 @@ export interface Train {
   stopAtM: number | null
   /** Game time the head reached the exit terminal, once it has. */
   arrivedAtS: number | null
-  /** A work train: sent by the game, finding its own way until the dispatcher routes it; not scored. */
+  /** A work train: sent in by the game every so often, dispatched like any other, not scored. */
   work?: boolean
-  /** A work train the dispatcher has routed; it no longer picks its own blocks. */
-  dispatched?: boolean
-  /** Game time a work train first found every block ahead held, while it has been waiting since. */
-  blockedSinceS?: number
 }
 
 export interface TrainResult {

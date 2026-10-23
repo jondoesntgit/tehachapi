@@ -3,7 +3,6 @@ import { advance } from './physics'
 import { isDeadlocked } from './routing'
 import {
   buildTimetable,
-  extendWorkTrains,
   nextWorkTrainAt,
   nextArrivalS,
   placeStartingTrains,
@@ -36,9 +35,8 @@ export function createInitialState(graph: TrackGraph, seed?: number): GameState 
 }
 
 /** Advances the whole game by `dtS` game seconds. */
-export function step(graph: TrackGraph, rawState: GameState, dtS: number): GameState {
-  if (rawState.deadlocked) return rawState
-  const state = extendWorkTrains(graph, rawState)
+export function step(graph: TrackGraph, state: GameState, dtS: number): GameState {
+  if (state.deadlocked) return state
   const { trainLengthM, physics } = graph.level
   const timeS = state.timeS + dtS
   const reservations = { ...state.reservations }

@@ -231,8 +231,7 @@ export function requestRoute(
   }
   for (const step of path) reservations[step.edgeId] = trainId
 
-  // A routed work train is the dispatcher's from now on.
-  const routed: Train = { ...train, path, stopAtM: stop.exit ? null : stopAtM, ...(train.work && { dispatched: true }) }
+  const routed: Train = { ...train, path, stopAtM: stop.exit ? null : stopAtM }
   return {
     ok: true,
     state: { ...state, reservations, trains: state.trains.map((t) => (t.id === trainId ? routed : t)) },
@@ -245,8 +244,6 @@ export function requestRoute(
  */
 export function canProgress(graph: TrackGraph, state: GameState, train: Train): boolean {
   if (train.stopAtM === null) return true
-  // A work train left to itself always gets out in the end: it reverses if it waits too long.
-  if (train.work && !train.dispatched) return true
   const headStep = train.path[locateStep(graph, train.path, train.headM).index]
   const heldByOthers = new Set(Object.keys(state.reservations).filter((id) => state.reservations[id] !== train.id))
   return nextSteps(graph, headStep).some(

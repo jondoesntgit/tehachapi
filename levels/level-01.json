@@ -22,6 +22,8 @@
     { "id": "SW_SW", "x": 2800, "y": 0, "kind": "switch" },
     { "id": "SW_SE", "x": 3200, "y": 0, "kind": "switch" },
     { "id": "SW_SJ", "x": 3000, "y": 100, "kind": "switch" },
+    { "id": "SW_E3", "x": 3400, "y": 180, "kind": "switch" },
+    { "id": "SW_E4", "x": 4000, "y": 180, "kind": "switch" },
     { "id": "SW_E1", "x": 4200, "y": 180, "kind": "switch" },
     { "id": "SW_E2", "x": 4800, "y": 180, "kind": "switch" },
     { "id": "SOUTHEAST", "x": 6000, "y": 180, "kind": "terminal", "label": "SE-Terminal", "color": "#ffdc3c" },
@@ -57,29 +59,32 @@
     { "id": "SIDING_D", "from": "SW_D1", "to": "SW_D2", "points": [[4800, 60], [5200, 60]] },
     { "id": "SPUR_W", "from": "SW_SW", "to": "SW_SJ", "points": [[2900, 30]], "branch": "SOUTHEAST" },
     { "id": "SPUR_E", "from": "SW_SE", "to": "SW_SJ", "points": [[3100, 30]], "branch": "SOUTHEAST" },
-    { "id": "SE1", "from": "SW_SJ", "to": "SW_E1", "points": [[3000, 160], [3060, 180]], "branch": "SOUTHEAST" },
+    { "id": "SE1", "from": "SW_SJ", "to": "SW_E3", "points": [[3000, 160], [3060, 180]], "branch": "SOUTHEAST" },
+    { "id": "SE1B", "from": "SW_E3", "to": "SW_E4", "branch": "SOUTHEAST" },
+    { "id": "SE_LOOP2", "from": "SW_E3", "to": "SW_E4", "points": [[3500, 120], [3900, 120]], "branch": "SOUTHEAST" },
+    { "id": "SE1C", "from": "SW_E4", "to": "SW_E1", "branch": "SOUTHEAST" },
     { "id": "SE2", "from": "SW_E1", "to": "SW_E2", "branch": "SOUTHEAST" },
     { "id": "SE_LOOP", "from": "SW_E1", "to": "SW_E2", "points": [[4300, 120], [4700, 120]], "branch": "SOUTHEAST" },
     { "id": "SE3", "from": "SW_E2", "to": "SOUTHEAST", "branch": "SOUTHEAST" }
   ],
   "labels": [
-    { "text": "to SE-Terminal", "x": 3120, "y": 150, "color": "#ffdc3c" },
+    { "text": "to SE-Terminal", "x": 4900, "y": 150, "color": "#ffdc3c" },
     { "text": "to SW Terminal", "x": 1850, "y": 120, "color": "#f472d0" }
   ],
   "startingTrains": [
     {
       "id": "L1", "name": "Westbound Local 11",
-      "edge": "SIDING_A", "edgeChoices": ["SIDING_A", "SIDING_B", "SIDING_C", "SIDING_D", "SE_LOOP", "SW_SIDING1", "SW_SIDING2"], "direction": -1,
+      "edge": "SIDING_A", "edgeChoices": ["SIDING_A", "SIDING_B", "SIDING_C", "SIDING_D", "SE_LOOP", "SE_LOOP2", "SW_SIDING1", "SW_SIDING2"], "direction": -1,
       "maxSpeedMps": 12, "destination": "WEST", "dueAt": "10:10"
     },
     {
       "id": "L2", "name": "Eastbound Local 12",
-      "edge": "SIDING_D", "edgeChoices": ["SIDING_A", "SIDING_B", "SIDING_C", "SIDING_D", "SE_LOOP", "SW_SIDING1", "SW_SIDING2"], "direction": 1,
+      "edge": "SIDING_D", "edgeChoices": ["SIDING_A", "SIDING_B", "SIDING_C", "SIDING_D", "SE_LOOP", "SE_LOOP2", "SW_SIDING1", "SW_SIDING2"], "direction": 1,
       "maxSpeedMps": 12, "destination": "EAST", "dueAt": "10:12"
     },
     {
       "id": "L3", "name": "Westbound Local 13",
-      "edge": "SIDING_B", "edgeChoices": ["SIDING_A", "SIDING_B", "SIDING_C", "SIDING_D", "SE_LOOP", "SW_SIDING1", "SW_SIDING2"], "direction": -1,
+      "edge": "SIDING_B", "edgeChoices": ["SIDING_A", "SIDING_B", "SIDING_C", "SIDING_D", "SE_LOOP", "SE_LOOP2", "SW_SIDING1", "SW_SIDING2"], "direction": -1,
       "maxSpeedMps": 12, "destination": "WEST", "dueAt": "10:18"
     }
   ],
