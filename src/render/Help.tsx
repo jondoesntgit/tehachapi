@@ -61,7 +61,7 @@ export function Help({ onClose }: { onClose: () => void }) {
             <h3>Commands</h3>
             <dl>
               <dt>Tap a train</dt>
-              <dd>Select it. The train chips along the bottom select too.</dd>
+              <dd>Select it.</dd>
               <dt>Then tap track</dt>
               <dd>Send it into that block. It speeds up, cruises and pulls up at the far end of the block, leaving the track behind it clear. If the block is too short for the whole train, it runs on to the next block it fits in.</dd>
               <dt>Then tap a terminal</dt>
@@ -69,7 +69,7 @@ export function Help({ onClose }: { onClose: () => void }) {
               <dt>Tap empty space</dt>
               <dd>Clear the selection.</dd>
               <dt>1× 5× 10× 60×</dt>
-              <dd>Game speed. Drops back to 1× whenever a train enters.</dd>
+              <dd>Game speed. Drops back to 1× whenever a train enters, unless you double-tap 5×: that holds 5× until you pick another speed.</dd>
               <dt>⏭</dt>
               <dd>Skip to the next train. Only works while the board is empty.</dd>
               <dt>?</dt>
@@ -95,23 +95,16 @@ export function Help({ onClose }: { onClose: () => void }) {
                 </li>
               ))}
             </ul>
-            <h3>Train list</h3>
+            <h3>Train labels</h3>
             <ul className="legend">
               <li>
-                <span className="chip done">
-                  <b>T1</b>
-                </span>
-                Left on time
+                <b>T3 · 12m</b>&nbsp;due at its destination in 12 minutes
               </li>
               <li>
-                <span className="chip late">
-                  <b>T1</b>
-                </span>
-                Left late
+                <b>T3 · 2m late</b>&nbsp;already 2 minutes past due
               </li>
               <li>
-                <span className="chip upcoming">10:32</span>
-                Due to enter later
+                <b>W</b>&nbsp;a work train (not timed)
               </li>
             </ul>
           </section>

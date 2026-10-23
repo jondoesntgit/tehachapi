@@ -15,6 +15,8 @@ interface GameStore {
   game: GameState
   selectedTrainId: string | null
   timeScale: number
+  /** The speed was double-tapped: it stays put when a train enters, until another speed is picked. */
+  speedLocked: boolean
   message: string | null
   /** The help panel is open; the simulation is paused while it is. */
   helpOpen: boolean
@@ -24,7 +26,7 @@ interface GameStore {
   tick: (realDtS: number) => void
   selectTrain: (trainId: string | null) => void
   routeSelectedTo: (target: TrackPosition) => void
-  setTimeScale: (timeScale: number) => void
+  setTimeScale: (timeScale: number, lock?: boolean) => void
   skipAhead: () => void
   clearMessage: () => void
   setHelpOpen: (open: boolean) => void
@@ -71,12 +73,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   game: newGame(graph),
   selectedTrainId: null,
   timeScale: 1,
+  speedLocked: false,
   message: null,
   helpOpen: false,
   entryCounts: {},
 
   tick: (realDtS) => {
-    const { graph, game, timeScale, selectedTrainId, helpOpen } = get()
+    const { graph, game, timeScale, speedLocked, selectedTrainId, helpOpen } = get()
     if (helpOpen) return
     accumulatorS += Math.min(realDtS, MAX_FRAME_S) * timeScale
     let next = game
@@ -103,7 +106,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       game: next,
       selectedTrainId: stillThere ? selectedTrainId : null,
-      timeScale: entered ? 1 : timeScale,
+      timeScale: entered && !speedLocked ? 1 : timeScale,
       ...(newTrains.length > 0 && { entryCounts }),
       ...(arrivalMessage && { message: arrivalMessage }),
     })
@@ -119,10 +122,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     else set({ game: result.state ?? game, message: failureMessage(result.reason, result.blockedBy, game, selectedTrainId) })
   },
 
-  setTimeScale: (timeScale) => set({ timeScale }),
+  setTimeScale: (timeScale, lock = false) => set({ timeScale, speedLocked: lock }),
 
   skipAhead: () => {
-    set({ game: skipToNextArrival(get().game), timeScale: 1 })
+    const { game, speedLocked, timeScale } = get()
+    set({ game: skipToNextArrival(game), timeScale: speedLocked ? timeScale : 1 })
   },
 
   clearMessage: () => set({ message: null }),
@@ -131,6 +135,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   restart: () => {
     accumulatorS = 0
-    set({ game: newGame(get().graph), selectedTrainId: null, timeScale: 1, message: null })
+    set({ game: newGame(get().graph), selectedTrainId: null, timeScale: 1, speedLocked: false, message: null })
   },
 }))

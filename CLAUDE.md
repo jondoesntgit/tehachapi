@@ -11,7 +11,7 @@ The MVP is done and deployed: level 1 is playable end to end.
 
 Working today:
 - Engine: track graph, routing with reservations, exact-stop physics, clock, scheduler, scoring.
-- SVG map, tap-to-route, HUD (clock, 1×/5×/10×/60×, skip to next train, train list, route-refused messages).
+- SVG map, tap-to-route, HUD (clock, 1×/5×/10×/60× with double-tap to hold 5×, skip to next train, route-refused messages); each train's label shows minutes until it's due.
 - CI and GitHub Pages deploy.
 
 Not built yet (see Roadmap):
@@ -71,9 +71,9 @@ src/
   render/            # React components that only READ engine state
     view.ts          # World -> view mapping (Y_SCALE), viewBox
     TrackLayer.tsx   # <polyline> per edge; each cleared route drawn in its train's color
-    TrainLayer.tsx   # Thick <polyline> per train body in its destination's color, label, stop marker
-    Hud.tsx          # Clock, speed buttons, train list, messages, level-complete panel
-  (index.css)        # The map sits between the top bar and the train list so neither covers track
+    TrainLayer.tsx   # Thick <polyline> per train body in its destination's color, label with minutes until due, stop marker
+    Hud.tsx          # Clock, speed buttons (double-tap 5× to hold it), messages, level-complete panel
+  (index.css)        # The map fills the screen below the top bar; nothing covers track
   input/
     useTapRouting.ts # Tap train -> select; tap track or terminal -> request route
   store.ts           # Zustand: holds engine state, time scale, selection; runs the fixed-step loop
@@ -122,7 +122,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Score:** `levelScore` = 100 less `lateTotal` (minutes late, plus 90 for a deadlock); the end-of-game panel shows it.
 - **Deadlock ends the game** (`isDeadlocked`, checked at the end of every `step`): once every scheduled train's entry time has passed (held-at-portal counts as launched), and every train on the board is stopped with no way forward (`canProgress`: no free block ahead with room that still leads to its destination), `state.deadlocked` is set. `step` then returns the state unchanged, `isLevelComplete` is true, and `DEADLOCK_PENALTY_MIN` (90) is added to the late total (`lateTotal`, `levelScore`). Reservations and the exact stop still make collisions and overruns impossible.
 - **Idle limit** (`checkIdle`, at the end of every `step`; level `idleLimitMin`, 20 in level 1): `state.idleSinceS` records when every train on the board last stood still (an empty board isn't idle); once that lasts `idleLimitMin`, `state.stalled` ends the game like a deadlock but with no penalty. The end panel says why.
-- **Fast-forward:** the store drops back to 1× whenever a train enters. "Skip to next train" only works while no dispatched train is on the board.
+- **Fast-forward:** the store drops back to 1× whenever a train enters, unless the speed is held (`speedLocked`: a double tap on 5× in the HUD; cleared by picking any speed). "Skip to next train" only works while no dispatched train is on the board.
 
 ## Level file format (`levels/*.json`)
 

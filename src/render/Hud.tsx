@@ -1,8 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { formatClock } from '../engine/clock'
 import {
   DEADLOCK_PENALTY_MIN,
-  getScheduleEntry,
   heldAtPortal,
   isLevelComplete,
   lateTotal,
@@ -11,18 +10,29 @@ import {
 } from '../engine/scheduler'
 import { TIME_SCALES, useGameStore } from '../store'
 import { Help } from './Help'
-import { destinationColor, WORK_TRAIN_COLOR } from './view'
 
 const MESSAGE_MS = 3000
+/** The speed a double tap holds. */
+const LOCKABLE_SCALE = 5
+const DOUBLE_TAP_MS = 400
 
 export function Hud() {
   const graph = useGameStore((s) => s.graph)
   const game = useGameStore((s) => s.game)
-  const selectedTrainId = useGameStore((s) => s.selectedTrainId)
   const timeScale = useGameStore((s) => s.timeScale)
   const message = useGameStore((s) => s.message)
   const helpOpen = useGameStore((s) => s.helpOpen)
-  const { selectTrain, setTimeScale, skipAhead, clearMessage, setHelpOpen, restart } = useGameStore.getState()
+  const speedLocked = useGameStore((s) => s.speedLocked)
+  const { setTimeScale, skipAhead, clearMessage, setHelpOpen, restart } = useGameStore.getState()
+
+  // Two taps on 5× in quick succession hold it there, even when trains enter.
+  const lastTap = useRef<{ scale: number; at: number } | null>(null)
+  const onSpeed = (scale: number) => {
+    const now = Date.now()
+    const double = scale === LOCKABLE_SCALE && lastTap.current?.scale === scale && now - lastTap.current.at < DOUBLE_TAP_MS
+    lastTap.current = { scale, at: now }
+    setTimeScale(scale, double)
+  }
 
   useEffect(() => {
     if (!message) return
@@ -30,14 +40,9 @@ export function Hud() {
     return () => clearTimeout(timer)
   }, [message, clearMessage])
 
-  const label = (nodeId: string) => graph.nodes.get(nodeId)?.label ?? nodeId
   const held = heldAtPortal(graph, game)
-  const upcoming = game.pending
-    .map((id) => getScheduleEntry(graph, id))
-    .filter((entry) => game.timetable[entry.id].appearsAtS > game.timeS)
   const canSkip = game.trains.every((t) => t.work) && nextArrivalS(game) !== null
   const complete = isLevelComplete(game)
-  const selected = game.trains.find((t) => t.id === selectedTrainId)
 
   return (
     <>
@@ -46,8 +51,13 @@ export function Hud() {
         <div className="title">{graph.level.title}</div>
         <div className="buttons">
           {TIME_SCALES.map((scale) => (
-            <button key={scale} className={scale === timeScale ? 'active' : ''} onClick={() => setTimeScale(scale)}>
-              {scale}×
+            <button
+              key={scale}
+              className={scale === timeScale ? 'active' : ''}
+              aria-label={scale === LOCKABLE_SCALE ? `${scale}× (double-tap to hold)` : `${scale}×`}
+              onClick={() => onSpeed(scale)}
+            >
+              {scale}×{scale === timeScale && speedLocked && <span className="lock"> 🔒</span>}
             </button>
           ))}
           <button disabled={!canSkip} onClick={skipAhead} aria-label="Skip to next train">
@@ -84,38 +94,6 @@ export function Hud() {
           <button onClick={restart}>Play again</button>
         </div>
       )}
-
-      <footer className="hud hud-bottom">
-        {!complete && game.trains.length === 0 && upcoming.length > 0 && (
-          <span className="hint">No trains yet. Fast-forward or skip to the next arrival.</span>
-        )}
-        {game.trains.length > 0 && !selected && <span className="hint">Tap a train, then tap where it should go.</span>}
-        {game.results.map((result) => (
-          <span key={result.trainId} className={result.lateMinutes === 0 ? 'chip done' : 'chip late'}>
-            <b>{result.trainId}</b> {result.lateMinutes === 0 ? 'on time' : `${result.lateMinutes} min late`}
-            {!result.reachedDestination && ' · wrong exit'}
-          </span>
-        ))}
-        {game.trains.map((train) => (
-          <button
-            key={train.id}
-            className={train.id === selectedTrainId ? 'chip active' : 'chip'}
-            onClick={() => selectTrain(train.id === selectedTrainId ? null : train.id)}
-          >
-            <span className="dot" style={{ background: train.work ? WORK_TRAIN_COLOR : destinationColor(graph, train.destination) }} />
-            <b>{train.id}</b> {train.name} → {label(train.destination)}
-            {!train.work && ` by ${formatClock(train.dueAtS)}`} ·{' '}
-            {Math.round(train.speedMps * 3.6)} km/h
-          </button>
-        ))}
-        {upcoming.map((entry) => (
-          <span key={entry.id} className="chip upcoming">
-            <span className="dot" style={{ background: destinationColor(graph, entry.destination) }} />
-            <b>{formatClock(game.timetable[entry.id].appearsAtS)}</b> {entry.name} · {label(entry.entry)} →{' '}
-            {label(entry.destination)} by {formatClock(game.timetable[entry.id].dueAtS)}
-          </span>
-        ))}
-      </footer>
 
       {helpOpen && <Help onClose={() => setHelpOpen(false)} />}
     </>

@@ -37,10 +37,10 @@ body,
 }
 
 .map {
-  /* Between the top bar and the train list, so neither covers any track. */
+  /* Below the top bar, so nothing covers any track. */
   position: absolute;
   top: calc(max(8px, env(safe-area-inset-top)) + 52px);
-  bottom: calc(max(8px, env(safe-area-inset-bottom)) + 52px);
+  bottom: max(8px, env(safe-area-inset-bottom));
   left: 0;
   width: 100%;
   height: auto;
@@ -163,6 +163,8 @@ body,
 }
 
 button {
+  /* No double-tap zoom, so a double tap on 5× is two taps. */
+  touch-action: manipulation;
   min-width: 44px;
   min-height: 44px;
   padding: 0 12px;
@@ -362,4 +364,8 @@ button:disabled {
 .summary .score b {
   font-size: 28px;
   font-variant-numeric: tabular-nums;
+}
+
+.lock {
+  font-size: 11px;
 }

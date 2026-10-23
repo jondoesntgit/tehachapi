@@ -4,10 +4,17 @@ import { useGameStore } from '../store'
 import type { CSSProperties } from 'react'
 import { LABEL_SIZE, pointsAttr, toView, trainColor } from './view'
 
+/** Minutes until a train is due at its destination, or how late it already is. */
+function dueIn(dueAtS: number, timeS: number): string {
+  const minutes = Math.ceil((dueAtS - timeS) / 60)
+  return minutes >= 0 ? `${minutes}m` : `${-minutes}m late`
+}
+
 export function TrainLayer() {
   const graph = useGameStore((s) => s.graph)
   const trains = useGameStore((s) => s.game.trains)
   const selectedTrainId = useGameStore((s) => s.selectedTrainId)
+  const timeS = useGameStore((s) => s.game.timeS)
   const { trainLengthM } = graph.level
 
   return (
@@ -27,7 +34,7 @@ export function TrainLayer() {
               points={pointsAttr(body)}
             />
             <text className="label train-label" x={head.x} y={head.y - 90} fontSize={LABEL_SIZE} textAnchor="middle">
-              {train.work ? WORK_TRAIN_LABEL : train.id}
+              {train.work ? WORK_TRAIN_LABEL : `${train.id} · ${dueIn(train.dueAtS, timeS)}`}
             </text>
           </g>
         )
