@@ -68,7 +68,7 @@ export function Help({ onClose }: { onClose: () => void }) {
               <dd>Send it out through that end of the line. Tapping anywhere in the last block before a terminal does the same.</dd>
               <dt>Tap empty space</dt>
               <dd>Clear the selection.</dd>
-              <dt>1× 10× 60×</dt>
+              <dt>1× 5× 10× 60×</dt>
               <dd>Game speed. Drops back to 1× whenever a train enters.</dd>
               <dt>⏭</dt>
               <dd>Skip to the next train. Only works while the board is empty.</dd>

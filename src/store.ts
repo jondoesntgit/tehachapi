@@ -5,7 +5,7 @@ import { createInitialState, FIXED_DT_S, skipToNextArrival, step } from './engin
 import { buildGraph, type TrackGraph } from './engine/trackGraph'
 import type { GameState, Level, TrackPosition } from './engine/types'
 
-export const TIME_SCALES = [1, 10, 60] as const
+export const TIME_SCALES = [1, 5, 10, 60] as const
 
 /** Longest real-time gap a single frame may simulate; a backgrounded tab resumes instead of leaping. */
 const MAX_FRAME_S = 0.25

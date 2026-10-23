@@ -11,7 +11,7 @@ The MVP is done and deployed: level 1 is playable end to end.
 
 Working today:
 - Engine: track graph, routing with reservations, exact-stop physics, clock, scheduler, scoring.
-- SVG map, tap-to-route, HUD (clock, 1×/10×/60×, skip to next train, train list, route-refused messages).
+- SVG map, tap-to-route, HUD (clock, 1×/5×/10×/60×, skip to next train, train list, route-refused messages).
 - CI and GitHub Pages deploy.
 
 Not built yet (see Roadmap):
