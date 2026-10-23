@@ -259,6 +259,47 @@ describe('work trains', () => {
     expect(moving.trains.find((t) => t.id === w.id)!.path).toHaveLength(2)
   })
 
+  it('reverses after waiting 10 minutes with every block ahead held, and goes back out', () => {
+    const state = firstWorkTrain(roomy)
+    const w = workTrain(state)
+    const cameFrom = w.path[0].edgeId === 'M1' ? 'WEST' : 'EAST'
+    const next = w.path[0].edgeId === 'M1' ? ['M2', 'SIDING_A'] : ['M4', 'SIDING_B']
+    const held = { ...state, reservations: { ...state.reservations, ...Object.fromEntries(next.map((e) => [e, 'X'])) } }
+    const me = (s: GameState) => s.trains.find((t) => t.id === w.id)
+    const waiting = runUntil(roomy, held, (s) => me(s)!.speedMps === 0 && me(s)!.headM > 100)
+    // Nine minutes on, still waiting, facing the same way.
+    const nine = runUntil(roomy, waiting, (s) => s.timeS >= waiting.timeS + 9 * 60)
+    expect(me(nine)!.path[0]).toEqual(w.path[0])
+    // Past ten minutes it has turned round and heads back to where it came in.
+    const turned = runUntil(roomy, nine, (s) => me(s)!.path[0].direction !== w.path[0].direction)
+    expect(turned.timeS - waiting.timeS).toBeLessThanOrEqual(10 * 60 + 1)
+    expect(me(turned)!.destination).toBe(cameFrom)
+    const gone = runUntil(roomy, turned, (s) => !me(s))
+    expect(Object.entries(gone.reservations).filter(([, h]) => h === 'X').map(([e]) => e).sort()).toEqual([...next].sort())
+  })
+
+  it('never reverses once the dispatcher has routed it', () => {
+    let state = firstWorkTrain(roomy)
+    const w = workTrain(state)
+    const target = w.path[0].edgeId === 'M1' ? { edgeId: 'M2', offsetM: 600 } : { edgeId: 'M4', offsetM: 600 }
+    state = route(roomy, state, w.id, target)
+    const held = { ...state, reservations: { ...state.reservations, M3: 'X', SIDING_B: 'X', SIDING_A: 'X', M2: state.reservations.M2 ?? 'X' } }
+    const later = runUntil(roomy, held, (s) => s.timeS >= held.timeS + 25 * 60)
+    expect(later.trains.find((t) => t.id === w.id)!.path.at(-1)!.direction).toBe(state.trains.find((t) => t.id === w.id)!.path.at(-1)!.direction)
+  })
+
+  it('keeps no more than two work trains on the board at once', () => {
+    let state = createInitialState(roomy, 2)
+    let most = 0
+    for (let i = 0; i < 150; i++) {
+      state = runUntil(roomy, state, (s) => s.timeS >= state.timeS + 60)
+      most = Math.max(most, state.trains.filter((t) => t.work).length)
+      expect(state.trains.filter((t) => t.work).length).toBeLessThanOrEqual(2)
+    }
+    expect(most).toBe(2)
+    expect(state.workTrainsSent).toBeGreaterThan(2)
+  })
+
   it('stops coming once every scheduled train has entered, and never holds the game open', () => {
     // A level whose only scheduled train enters at 10:15.
     const one = buildGraph({ ...roomy.level, schedule: [{ ...level.schedule[0], appearsAt: '10:15', dueAt: '10:45' }] })

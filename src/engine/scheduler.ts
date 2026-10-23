@@ -189,6 +189,11 @@ export const WORK_TRAIN_SPEED_MPS = 7.5 * 0.44704
  * turn from a wye leg onto its tail track (~55°) stay open.
  */
 export const WORK_TRAIN_MAX_TURN_DEG = 60
+/** No more than this many work trains on the board at once; a due one waits for a space. */
+export const MAX_WORK_TRAINS = 2
+/** A work train that has waited this long with every block ahead held turns round. */
+export const WORK_TRAIN_REVERSE_AFTER_S = 10 * 60
+
 /** Map label for every work train; ids are W1, W2, ... so several can run at once. */
 export const WORK_TRAIN_LABEL = 'W'
 
@@ -227,6 +232,7 @@ function gentlyReaches(graph: TrackGraph, step: RouteStep, terminalId: string): 
  */
 export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
   if (!graph.level.workTrains || state.pending.length === 0 || state.timeS < state.nextWorkTrainS) return state
+  if (state.trains.filter((t) => t.work).length >= MAX_WORK_TRAINS) return state
 
   const random = seededRandom((state.seed ^ 0x3017) + state.workTrainsSent * 7919)
   const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
@@ -272,7 +278,8 @@ function workStop(graph: TrackGraph, path: RouteStep[]): number | null {
 /**
  * A work train holds the block its head is in and the next one. When its head reaches the last block
  * it holds, it takes one more: a random choice among the gentle turns that still reach its
- * destination and aren't held by another train. If none is free it pulls up and waits.
+ * destination and aren't held by another train. If none is free it pulls up and waits; once it has
+ * stood for `WORK_TRAIN_REVERSE_AFTER_S` with the way ahead held, it reverses (`reverseWorkTrain`).
  */
 export function extendWorkTrains(graph: TrackGraph, state: GameState): GameState {
   let { trains, reservations } = state
@@ -280,17 +287,73 @@ export function extendWorkTrains(graph: TrackGraph, state: GameState): GameState
     if (!train.work || train.dispatched || train.stopAtM === null) continue
     if (locateStep(graph, train.path, train.headM).index < train.path.length - 1) continue
     const last = train.path[train.path.length - 1]
-    const options = gentleSteps(graph, last).filter(
-      (step) => gentlyReaches(graph, step, train.destination) && (reservations[step.edgeId] ?? train.id) === train.id,
-    )
-    if (options.length === 0) continue
-    const random = seededRandom((state.seed ^ 0x3017) + Number(train.id.slice(1)) * 7919 + train.path.length * 104729)
-    const path = [...train.path, options[Math.floor(random() * options.length)]]
-    const extended: Train = { ...train, path, stopAtM: workStop(graph, path) }
-    trains = trains.map((t) => (t.id === train.id ? extended : t))
-    reservations = { ...reservations, [path[path.length - 1].edgeId]: train.id }
+    const ways = gentleSteps(graph, last).filter((step) => gentlyReaches(graph, step, train.destination))
+    const options = ways.filter((step) => (reservations[step.edgeId] ?? train.id) === train.id)
+    let updated: Train | null = null
+    if (options.length > 0) {
+      const random = seededRandom((state.seed ^ 0x3017) + Number(train.id.slice(1)) * 7919 + train.path.length * 104729)
+      const path = [...train.path, options[Math.floor(random() * options.length)]]
+      updated = { ...train, path, stopAtM: workStop(graph, path), blockedSinceS: undefined }
+      reservations = { ...reservations, [path[path.length - 1].edgeId]: train.id }
+    } else if (ways.length > 0 && train.speedMps > 0) {
+      // Still rolling up to the end of its block: the wait hasn't started.
+      if (train.blockedSinceS !== undefined) updated = { ...train, blockedSinceS: undefined }
+    } else if (ways.length > 0) {
+      // Stopped with every block ahead held by another train.
+      const since = train.blockedSinceS ?? state.timeS
+      if (state.timeS - since >= WORK_TRAIN_REVERSE_AFTER_S) {
+        const reversed = reverseWorkTrain(graph, train, state.seed)
+        if (reversed) {
+          // Let go of the blocks it had claimed ahead; it keeps only those under its body.
+          const kept = new Set(reversed.path.map((s) => s.edgeId))
+          reservations = Object.fromEntries(
+            Object.entries(reservations).filter(([edgeId, holder]) => holder !== train.id || kept.has(edgeId)),
+          )
+          updated = reversed
+        }
+      } else if (train.blockedSinceS === undefined) {
+        updated = { ...train, blockedSinceS: since }
+      }
+    }
+    if (updated) trains = trains.map((t) => (t.id === train.id ? updated! : t))
   }
-  return trains === state.trains ? state : { ...state, trains, reservations }
+  return trains === state.trains && reservations === state.reservations ? state : { ...state, trains, reservations }
+}
+
+/**
+ * Turns a work train round where it stands: it keeps only the blocks under its body, its old tail
+ * becomes its head, and it heads for its destination if it can still reach it, else for another
+ * terminal it can. `null` if its tail isn't on the map yet or no terminal can be reached.
+ */
+export function reverseWorkTrain(graph: TrackGraph, train: Train, seed: number): Train | null {
+  const { trainLengthM } = graph.level
+  if (train.headM < trainLengthM) return null
+  const occupied = train.path.slice(0, locateStep(graph, train.path, train.headM).index + 1)
+  const totalM = pathLength(graph, occupied)
+  const path: RouteStep[] = occupied
+    .slice()
+    .reverse()
+    .map((s) => ({ edgeId: s.edgeId, direction: -s.direction as Direction }))
+  const front = path[path.length - 1]
+  const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
+  const reachable = terminals.filter((id) => gentlyReaches(graph, front, id))
+  if (reachable.length === 0) return null
+  const random = seededRandom((seed ^ 0x2e7e) + Number(train.id.slice(1)) * 7919)
+  const destination = reachable.includes(train.destination)
+    ? train.destination
+    : reachable[Math.floor(random() * reachable.length)]
+  const headM = totalM - (train.headM - trainLengthM)
+  const stop = workStop(graph, path)
+  return {
+    ...train,
+    path,
+    headM,
+    speedMps: 0,
+    // Never start with the head already past its stop.
+    stopAtM: stop === null ? null : Math.max(stop, headM),
+    destination,
+    blockedSinceS: undefined,
+  }
 }
 
 /** Minutes added to the late total when the game ends in a deadlock. */

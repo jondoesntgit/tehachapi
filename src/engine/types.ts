@@ -143,6 +143,8 @@ export interface Train {
   work?: boolean
   /** A work train the dispatcher has routed; it no longer picks its own blocks. */
   dispatched?: boolean
+  /** Game time a work train first found every block ahead held, while it has been waiting since. */
+  blockedSinceS?: number
 }
 
 export interface TrainResult {
