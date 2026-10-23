@@ -66,8 +66,37 @@ export function nextArrivalS(state: GameState): number | null {
  * routed to the far end of its entry block and stops there until the dispatcher sends it on.
  * A train whose entry block is reserved stays pending.
  */
-export function spawnDue(graph: TrackGraph, state: GameState): GameState {
+/**
+ * Keeps at least `minTrainsOnBoard` scheduled trains in play (on the board, or due and waiting at
+ * their portal). While there are fewer, the earliest pending train whose entry block is free is
+ * brought forward to now; its due time moves with it, so it keeps its time allowance.
+ */
+export function bringTrainsForward(graph: TrackGraph, state: GameState): GameState {
+  const min = graph.level.minTrainsOnBoard ?? 0
+  const inPlay = state.trains.filter((t) => !t.work).length + heldAtPortal(graph, state).length
+  if (inPlay >= min) return state
+  const usedEntries = new Set<string>()
+  let timetable = state.timetable
+  let count = inPlay
+  const waiting = state.pending
+    .filter((id) => timetable[id].appearsAtS > state.timeS)
+    .sort((a, b) => timetable[a].appearsAtS - timetable[b].appearsAtS)
+  for (const id of waiting) {
+    if (count >= min) break
+    const edgeId = entryStep(graph, getScheduleEntry(graph, id).entry).edgeId
+    if (state.reservations[edgeId] !== undefined || usedEntries.has(edgeId)) continue
+    usedEntries.add(edgeId)
+    const { appearsAtS, dueAtS } = timetable[id]
+    const earlierS = appearsAtS - state.timeS
+    timetable = { ...timetable, [id]: { appearsAtS: state.timeS, dueAtS: dueAtS - earlierS } }
+    count++
+  }
+  return timetable === state.timetable ? state : { ...state, timetable }
+}
+
+export function spawnDue(graph: TrackGraph, rawState: GameState): GameState {
   const { decelMps2, stopMarginM } = graph.level.physics
+  const state = bringTrainsForward(graph, rawState)
   let next = state
   for (const entry of heldAtPortal(graph, state)) {
     const step = entryStep(graph, entry.entry)

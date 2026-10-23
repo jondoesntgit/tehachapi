@@ -6,6 +6,7 @@
   "physics": { "accelMps2": 0.25, "decelMps2": 0.35, "stopMarginM": 5 },
   "appearsJitterMin": 3,
   "workTrains": true,
+  "minTrainsOnBoard": 4,
   "nodes": [
     { "id": "WEST",  "x": 0,    "y": 0, "kind": "terminal", "label": "West Terminal", "color": "#ff9640" },
     { "id": "SW_A1", "x": 700,  "y": 0, "kind": "switch" },

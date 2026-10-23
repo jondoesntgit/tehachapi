@@ -97,6 +97,8 @@ export interface Level {
   labels?: MapLabel[]
   /** Send a work train every 10 to 20 minutes while scheduled trains are still to come (see `spawnWorkTrain`). */
   workTrains?: boolean
+  /** Bring scheduled trains in early so at least this many are in play (see `bringTrainsForward`). */
+  minTrainsOnBoard?: number
 }
 
 /** 1 = travelling from the edge's `from` node toward `to`; -1 = the reverse. */

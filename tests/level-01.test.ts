@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
-import { canReach, hasRoom, requestRoute } from '../src/engine/routing'
+import { canReach, findSteps, hasRoom, requestRoute } from '../src/engine/routing'
 import { buildTimetable, entryStep, isLevelComplete } from '../src/engine/scheduler'
 import { createInitialState, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, nextSteps, turnDegrees } from '../src/engine/trackGraph'
@@ -11,6 +11,9 @@ const EAST_EXIT = { edgeId: 'M9', offsetM: 700 }
 const WEST_EXIT = { edgeId: 'M1', offsetM: 0 }
 const SOUTHEAST_EXIT = { edgeId: 'SE3', offsetM: getEdge(graph, 'SE3').lengthM }
 const SOUTHWEST_EXIT = { edgeId: 'SW5', offsetM: 0 }
+/** A tap that sends a train out through `terminal`. */
+const exitFor = (terminal: string) =>
+  ({ WEST: WEST_EXIT, EAST: EAST_EXIT, SOUTHEAST: SOUTHEAST_EXIT, SOUTHWEST: SOUTHWEST_EXIT })[terminal]!
 const SIDINGS = ['SIDING_A', 'SIDING_B', 'SIDING_C', 'SIDING_D']
 
 const has = (id: string) => (s: GameState) => s.trains.some((t) => t.id === id)
@@ -117,6 +120,7 @@ describe('level 1', () => {
   // Level 1's track with no other traffic until noon, so nothing gets in a work train's way.
   const empty = buildGraph({
     ...level,
+    minTrainsOnBoard: 0,
     startingTrains: [],
     schedule: [{ ...level.schedule[0], appearsAt: '12:00', appearsBetween: undefined, dueAt: '12:20' }],
   })
@@ -161,6 +165,60 @@ describe('level 1', () => {
         expect(e.destination).not.toBe(e.entry)
         expect(canReach(graph, entryStep(graph, e.entry), e.destination)).toBe(true)
       }
+    }
+  })
+
+  it('brings trains in early so at least four scheduled trains are always in play', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      let state = createInitialState(graph, seed)
+      const inPlay = (s: GameState) =>
+        s.trains.filter((t) => !t.work).length + s.pending.filter((id) => s.timetable[id].appearsAtS <= s.timeS).length
+      // Sample the first hour, sending every train that can leave straight out, as a player might.
+      for (let i = 0; i < 60; i++) {
+        state = runUntil(graph, state, (s) => s.timeS >= state.timeS + 60)
+        if (state.pending.length >= 4) expect(inPlay(state)).toBeGreaterThanOrEqual(4)
+        for (const t of state.trains.filter((t) => !t.work && t.speedMps === 0)) {
+          const exit = exitFor(t.destination)
+          const r = requestRoute(graph, state, t.id, exit)
+          if (r.ok) state = r.state
+        }
+      }
+    }
+  })
+
+  it('keeps each train brought forward on its time allowance', () => {
+    const state = step(graph, createInitialState(graph, 3), 0.1)
+    const written = buildTimetable(graph, 3)
+    const moved = Object.keys(written).filter((id) => state.timetable[id].appearsAtS !== written[id].appearsAtS)
+    expect(moved.length).toBeGreaterThan(0)
+    for (const id of moved) {
+      expect(state.timetable[id].appearsAtS).toBeLessThan(written[id].appearsAtS)
+      expect(state.timetable[id].dueAtS - state.timetable[id].appearsAtS).toBe(written[id].dueAtS - written[id].appearsAtS)
+    }
+  })
+
+  it('makes at least three pairs of trains pass each other in every game', () => {
+    // A train's way across: shortest route from its portal to its destination.
+    const routeOf = (entry: string, destination: string) => {
+      const first = entryStep(graph, entry)
+      const exit = exitFor(destination)
+      return [first, ...(findSteps(graph, first, exit, new Set()) ?? [])]
+    }
+    const routes = Object.fromEntries(level.schedule.map((e) => [e.id, routeOf(e.entry, e.destination)]))
+    const opposed = (a: string, b: string) =>
+      routes[a].some((x) => routes[b].some((y) => x.edgeId === y.edgeId && x.direction !== y.direction))
+    for (let seed = 0; seed < 100; seed++) {
+      const timetable = buildTimetable(graph, seed)
+      const ids = level.schedule.map((e) => e.id)
+      let pairs = 0
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const [a, b] = [timetable[ids[i]], timetable[ids[j]]]
+          // Both on the line at once, heading opposite ways over shared track: they have to pass.
+          if (a.appearsAtS < b.dueAtS && b.appearsAtS < a.dueAtS && opposed(ids[i], ids[j])) pairs++
+        }
+      }
+      expect(pairs).toBeGreaterThanOrEqual(3)
     }
   })
 
@@ -288,10 +346,12 @@ describe('level 1', () => {
 
   it('plays the written timetable through on time with meets in sidings C and D', () => {
     // The dispatched timetable alone: this fixed script can't steer round a work train in its way.
-    // The three waves of four (T19–T30) all land together; this fixed script leaves them out.
+    // The three waves of four (T19–T30) all land together, and trains brought forward to keep four
+    // in play would scramble the order, so this fixed script leaves both out.
     const graph = buildGraph({
       ...level,
       workTrains: false,
+      minTrainsOnBoard: 0,
       schedule: level.schedule.filter((e) => Number(e.id.slice(1)) < 19),
     })
     const routeWhenClear = (state: GameState, trainId: string, target: TrackPosition) =>

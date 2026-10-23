@@ -113,6 +113,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
   - Otherwise it accelerates at `accel` up to `maxSpeed`.
   - The final step is clamped so the head lands exactly on the target with v = 0.
 - **Timetable:** `createInitialState(graph, seed)` builds `GameState.timetable` (`buildTimetable`): a scheduled train with `appearsBetween` appears at a random whole minute in that window; any other moves by a random whole number of minutes, up to the level's `appearsJitterMin` either way. The due time moves with the appearance. The store passes a fresh random seed each game; with no seed (tests) the timetable is as written. The engine only ever reads times from `state.timetable`.
+- **Keeping the board busy** (`bringTrainsForward`, run at the start of `spawnDue`): while fewer than the level's `minTrainsOnBoard` scheduled trains are in play (on the board, or due and held at a portal), the earliest pending train whose entry block is free has its timetable entry moved to now, due time moving with it. Work trains don't count.
 - **Entry pulse:** the store counts entries per terminal (`entryCounts`); the map pulses a terminal's end bar each time a train enters there.
 - **Spawning:** at its timetabled appearance, a train's head enters at its terminal's portal with the body still off the map. It is routed to the far end of its entry edge and stops there until the player sends it on. If the entry edge is reserved, the train stays pending and the HUD warns.
 - **Starting trains:** a level's `startingTrains` are already on the board at the start, stopped on their edge with the head `STOP_CLEARANCE_M` short of the far end (`placeStartingTrains`). With a seed, a train with `edgeChoices` stands on a random one of them that no earlier starting train has taken, facing whichever way reaches its destination (its written `direction` if both do; choices with neither are skipped). It uses its own random stream, so it doesn't change the timetable draws. The whole train must fit on that edge clear of both switches.
@@ -127,6 +128,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 See `levels/level-01.json`. Key fields:
 - `startTime` — game clock at level start, `"HH:MM"`.
 - `workTrains` (optional) — send a work train every 10 to 20 minutes while scheduled trains are still to come.
+- `minTrainsOnBoard` (optional) — bring scheduled trains in early to keep at least this many in play.
 - `appearsJitterMin` (optional) — max random shift, in minutes either way, applied to each scheduled train per game.
 - `trainLengthM`, `physics.accelMps2`, `physics.decelMps2`, `physics.stopMarginM`.
 - `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label?, color? }`. A terminal's `color` is the color of trains heading there (map, train list, help legend).
@@ -141,7 +143,7 @@ See `levels/level-01.json`. Key fields:
 
 - East = +x. "Eastbound" trains enter at the west terminal.
 - Keep engine functions pure (state in, new state out) and add a Vitest test with every engine change.
-- `tests/level-01.test.ts` contains a scripted full playthrough of level 1 on its written timetable, with work trains off and the three four-train waves (T19–T30) left out. Keep it passing; update it when level 1 changes.
+- `tests/level-01.test.ts` contains a scripted full playthrough of level 1 on its written timetable, with work trains off, `minTrainsOnBoard` off, and the three four-train waves (T19–T30) left out. Another test checks that every random timetable forces at least three pairs of trains to pass each other. Keep it passing; update it when level 1 changes.
 - Engine unit tests use the frozen fixture layout, so retuning a real level doesn't break them.
 - iPhone first: landscape, touch targets ≥ 44 pt, no hover-only UI, respect safe-area insets.
 - Stroke widths are in screen pixels (`vector-effect: non-scaling-stroke`); map label sizes are in view units.
@@ -154,7 +156,7 @@ Done:
 3. Render track + trains in SVG, fit to screen.
 4. Tap-to-route with reservations (green).
 5. Clock, HUD, scheduler from JSON, fast-forward.
-6. Level 1: four sidings, a wye to an SE line running under the main to the east (three blocks, a passing siding), a SW branch running under the main to the west (two passing sidings), both tinted and labelled; thirty-three trains (including three waves of four, one from each terminal, at 10:27–10:30, 10:45–10:47 and 11:27–11:38; three waiting at the start on random sidings), meets/passes, scoring out of 100, a work train every 10–20 minutes, randomized entry times, trains colored by destination.
+6. Level 1: four sidings, a wye to an SE line running under the main to the east (three blocks, a passing siding), a SW branch running under the main to the west (two passing sidings), both tinted and labelled; thirty-three trains (including three waves of four, one from each terminal, at 10:27–10:30, 10:45–10:47 and 11:27–11:38; three waiting at the start on random sidings), at least four scheduled trains always in play, at least three forced passes every game, scoring out of 100, a work train every 10–20 minutes, randomized entry times, trains colored by destination.
 
 Next:
 7. Per-train end-of-level score breakdown (deadlock detection and the score are done).
