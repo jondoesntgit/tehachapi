@@ -78,7 +78,8 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
               x2={p.x + out.y * PORTAL_HALF}
               y2={p.y - out.x * PORTAL_HALF}
             />
-            <text className="label" x={p.x} y={labelY} fontSize={LABEL_SIZE} textAnchor="middle">
+            {/* Named in the color of trains heading there. */}
+            <text className="label" x={p.x} y={labelY} fontSize={LABEL_SIZE} textAnchor="middle" style={{ fill: node.color }}>
               {node.label ?? node.id}
             </text>
           </g>
