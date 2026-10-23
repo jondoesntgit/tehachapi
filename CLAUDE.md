@@ -117,7 +117,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Spawning:** at its timetabled appearance, a train's head enters at its terminal's portal with the body still off the map. It is routed to the far end of its entry edge and stops there until the player sends it on. If the entry edge is reserved, the train stays pending and the HUD warns.
 - **Starting trains:** a level's `startingTrains` are already on the board at the start, stopped on their edge with the head `STOP_CLEARANCE_M` short of the far end (`placeStartingTrains`). With a seed, a train with `edgeChoices` stands on a random one of them that no earlier starting train has taken, facing whichever way reaches its destination (its written `direction` if both do; choices with neither are skipped). It uses its own random stream, so it doesn't change the timetable draws. The whole train must fit on that edge clear of both switches.
 - **Leaving and scoring:** arrival time is when the head reaches the exit terminal; the train is removed when its tail clears. A `TrainResult` records minutes late (0 = on time) and whether it left through its scheduled destination (routing makes a wrong exit impossible, so this is always true in play).
-- **Work trains** (`spawnWorkTrain`, levels with `workTrains: true`): when the board is empty, trains are still pending and none is due for `WORK_TRAIN_CLEAR_S` (5 min), a train `W` enters at a random terminal, bound for another, at 7.5 mph (`WORK_TRAIN_SPEED_MPS`). It holds only the block its head is in and the next one (plus track under its body): `extendWorkTrains`, at the start of each `step`, grants the next block when its head reaches the last one it holds, picked at random (from `state.seed`) among turns of at most `WORK_TRAIN_MAX_TURN_DEG` (60°) that still reach its destination and aren't held; otherwise it pulls up and waits. The turn limit keeps it off the acute turn at the bottom of the wye. The dispatcher can route it like any train; `requestRoute` then marks it `dispatched` and it stops claiming blocks for itself. It isn't scored, doesn't end fast-forward, and "Skip to next train" clears it away.
+- **Work trains** (`spawnWorkTrain`, levels with `workTrains: true`): every 10 to 20 minutes (`WORK_TRAIN_EVERY_MIN`; `state.nextWorkTrainS` from `nextWorkTrainAt`), while scheduled trains are still pending, a work train (ids `W1`, `W2`, …; labelled `W` on the map; several can run at once) enters at a random terminal whose entry block is free (or as soon as one frees), bound for another, at 7.5 mph (`WORK_TRAIN_SPEED_MPS`). It holds only the block its head is in and the next one (plus track under its body): `extendWorkTrains`, at the start of each `step`, grants the next block when its head reaches the last one it holds, picked at random (from `state.seed`) among turns of at most `WORK_TRAIN_MAX_TURN_DEG` (60°) that still reach its destination and aren't held; otherwise it pulls up and waits. The turn limit keeps it off the acute turn at the bottom of the wye. The dispatcher can route it like any train; `requestRoute` then marks it `dispatched` and it stops claiming blocks for itself. It isn't scored, doesn't end fast-forward, doesn't hold the level open (`isLevelComplete` ignores work trains), and "Skip to next train" clears it away.
 - **Score:** `levelScore` = 100 less `lateTotal` (minutes late, plus 90 for a deadlock); the end-of-game panel shows it.
 - **Deadlock ends the game** (`isDeadlocked`, checked at the end of every `step`): once every scheduled train's entry time has passed (held-at-portal counts as launched), and every train on the board is stopped with no way forward (`canProgress`: no free block ahead with room that still leads to its destination), `state.deadlocked` is set. `step` then returns the state unchanged, `isLevelComplete` is true, and `DEADLOCK_PENALTY_MIN` (90) is added to the late total (`lateTotal`, `levelScore`). Reservations and the exact stop still make collisions and overruns impossible.
 - **Fast-forward:** the store drops back to 1× whenever a train enters. "Skip to next train" only works while no dispatched train is on the board.
@@ -126,7 +126,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 
 See `levels/level-01.json`. Key fields:
 - `startTime` — game clock at level start, `"HH:MM"`.
-- `workTrains` (optional) — send work trains through gaps in the timetable.
+- `workTrains` (optional) — send a work train every 10 to 20 minutes while scheduled trains are still to come.
 - `appearsJitterMin` (optional) — max random shift, in minutes either way, applied to each scheduled train per game.
 - `trainLengthM`, `physics.accelMps2`, `physics.decelMps2`, `physics.stopMarginM`.
 - `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label?, color? }`. A terminal's `color` is the color of trains heading there (map, train list, help legend).
@@ -141,7 +141,7 @@ See `levels/level-01.json`. Key fields:
 
 - East = +x. "Eastbound" trains enter at the west terminal.
 - Keep engine functions pure (state in, new state out) and add a Vitest test with every engine change.
-- `tests/level-01.test.ts` contains a scripted full playthrough of level 1 on its written timetable, with work trains off. Keep it passing; update it when level 1 changes.
+- `tests/level-01.test.ts` contains a scripted full playthrough of level 1 on its written timetable, with work trains off and the three four-train waves (T19–T30) left out. Keep it passing; update it when level 1 changes.
 - Engine unit tests use the frozen fixture layout, so retuning a real level doesn't break them.
 - iPhone first: landscape, touch targets ≥ 44 pt, no hover-only UI, respect safe-area insets.
 - Stroke widths are in screen pixels (`vector-effect: non-scaling-stroke`); map label sizes are in view units.
@@ -154,7 +154,7 @@ Done:
 3. Render track + trains in SVG, fit to screen.
 4. Tap-to-route with reservations (green).
 5. Clock, HUD, scheduler from JSON, fast-forward.
-6. Level 1: four sidings, a wye to an SE line running under the main to the east (three blocks, a passing siding), a SW branch running under the main to the west (two passing sidings), both tinted and labelled; twenty-one trains (three bound for SE-Terminal and two from it, two bound for SW Terminal and two from it; three waiting at the start on random sidings), meets/passes, scoring out of 100, work trains in timetable gaps, randomized entry times, trains colored by destination.
+6. Level 1: four sidings, a wye to an SE line running under the main to the east (three blocks, a passing siding), a SW branch running under the main to the west (two passing sidings), both tinted and labelled; thirty-three trains (including three waves of four, one from each terminal, at 10:27–10:30, 10:45–10:47 and 11:27–11:38; three waiting at the start on random sidings), meets/passes, scoring out of 100, a work train every 10–20 minutes, randomized entry times, trains colored by destination.
 
 Next:
 7. Per-train end-of-level score breakdown (deadlock detection and the score are done).

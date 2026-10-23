@@ -4,6 +4,7 @@ import { isDeadlocked } from './routing'
 import {
   buildTimetable,
   extendWorkTrains,
+  nextWorkTrainAt,
   nextArrivalS,
   placeStartingTrains,
   scoreArrival,
@@ -28,6 +29,7 @@ export function createInitialState(graph: TrackGraph, seed?: number): GameState 
     timetable: buildTimetable(graph, seed),
     seed: seed ?? 0,
     workTrainsSent: 0,
+    nextWorkTrainS: nextWorkTrainAt(seed ?? 0, 0, parseClock(graph.level.startTime)),
     deadlocked: false,
     results: [],
   }

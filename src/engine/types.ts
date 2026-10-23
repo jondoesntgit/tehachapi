@@ -95,7 +95,7 @@ export interface Level {
   startingTrains?: StartingTrain[]
   /** Extra text on the map, e.g. naming a branch. */
   labels?: MapLabel[]
-  /** Send work trains through gaps in the timetable (see `spawnWorkTrain`). */
+  /** Send a work train every 10 to 20 minutes while scheduled trains are still to come (see `spawnWorkTrain`). */
   workTrains?: boolean
 }
 
@@ -174,6 +174,8 @@ export interface GameState {
   seed: number
   /** Work trains sent so far. */
   workTrainsSent: number
+  /** Game time the next work train goes out (levels with `workTrains`). */
+  nextWorkTrainS: number
   /** Every train was launched and the ones on the board blocked each other for good; the game is over. */
   deadlocked: boolean
   results: TrainResult[]

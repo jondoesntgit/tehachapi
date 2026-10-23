@@ -172,6 +172,66 @@
       "id": "T18", "name": "SW Transfer 118",
       "appearsAt": "10:30", "appearsBetween": ["09:55", "10:53"], "entry": "SOUTHEAST",
       "maxSpeedMps": 15, "destination": "SOUTHWEST", "dueAt": "10:52"
+    },
+    {
+      "id": "T19", "name": "Eastbound Freight 119",
+      "appearsAt": "10:27", "appearsBetween": ["10:27", "10:30"], "entry": "WEST",
+      "maxSpeedMps": 15, "destination": "EAST", "dueAt": "10:52"
+    },
+    {
+      "id": "T20", "name": "Westbound Express 120",
+      "appearsAt": "10:27", "appearsBetween": ["10:27", "10:30"], "entry": "EAST",
+      "maxSpeedMps": 27, "destination": "WEST", "dueAt": "10:52"
+    },
+    {
+      "id": "T21", "name": "SW Transfer 121",
+      "appearsAt": "10:27", "appearsBetween": ["10:27", "10:30"], "entry": "SOUTHEAST",
+      "maxSpeedMps": 15, "destination": "SOUTHWEST", "dueAt": "10:52"
+    },
+    {
+      "id": "T22", "name": "SE Transfer 122",
+      "appearsAt": "10:27", "appearsBetween": ["10:27", "10:30"], "entry": "SOUTHWEST",
+      "maxSpeedMps": 15, "destination": "SOUTHEAST", "dueAt": "10:52"
+    },
+    {
+      "id": "T23", "name": "SE Freight 123",
+      "appearsAt": "10:45", "appearsBetween": ["10:45", "10:47"], "entry": "WEST",
+      "maxSpeedMps": 15, "destination": "SOUTHEAST", "dueAt": "11:10"
+    },
+    {
+      "id": "T24", "name": "SW Freight 124",
+      "appearsAt": "10:45", "appearsBetween": ["10:45", "10:47"], "entry": "EAST",
+      "maxSpeedMps": 15, "destination": "SOUTHWEST", "dueAt": "11:10"
+    },
+    {
+      "id": "T25", "name": "Eastbound Local 125",
+      "appearsAt": "10:45", "appearsBetween": ["10:45", "10:47"], "entry": "SOUTHEAST",
+      "maxSpeedMps": 12, "destination": "EAST", "dueAt": "11:10"
+    },
+    {
+      "id": "T26", "name": "Eastbound Local 126",
+      "appearsAt": "10:45", "appearsBetween": ["10:45", "10:47"], "entry": "SOUTHWEST",
+      "maxSpeedMps": 12, "destination": "EAST", "dueAt": "11:10"
+    },
+    {
+      "id": "T27", "name": "Eastbound Express 127",
+      "appearsAt": "11:30", "appearsBetween": ["11:27", "11:38"], "entry": "WEST",
+      "maxSpeedMps": 27, "destination": "EAST", "dueAt": "11:55"
+    },
+    {
+      "id": "T28", "name": "SE Freight 128",
+      "appearsAt": "11:30", "appearsBetween": ["11:27", "11:38"], "entry": "EAST",
+      "maxSpeedMps": 15, "destination": "SOUTHEAST", "dueAt": "11:55"
+    },
+    {
+      "id": "T29", "name": "Westbound Freight 129",
+      "appearsAt": "11:30", "appearsBetween": ["11:27", "11:38"], "entry": "SOUTHEAST",
+      "maxSpeedMps": 15, "destination": "WEST", "dueAt": "11:55"
+    },
+    {
+      "id": "T30", "name": "Eastbound Freight 130",
+      "appearsAt": "11:30", "appearsBetween": ["11:27", "11:38"], "entry": "SOUTHWEST",
+      "maxSpeedMps": 15, "destination": "EAST", "dueAt": "11:55"
     }
   ]
 }

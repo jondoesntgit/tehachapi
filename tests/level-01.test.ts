@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
 import { canReach, hasRoom, requestRoute } from '../src/engine/routing'
-import { buildTimetable, isLevelComplete } from '../src/engine/scheduler'
+import { buildTimetable, entryStep, isLevelComplete } from '../src/engine/scheduler'
 import { createInitialState, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, nextSteps, turnDegrees } from '../src/engine/trackGraph'
 import type { GameState, RouteStep, TrackPosition } from '../src/engine/types'
@@ -28,7 +28,7 @@ describe('level 1', () => {
       expect(lengthM).toBeGreaterThanOrEqual(level.trainLengthM + 40)
       expect(lengthM).toBeLessThan(700)
     }
-    expect(level.schedule).toHaveLength(18)
+    expect(level.schedule).toHaveLength(30)
     expect(level.startingTrains).toHaveLength(3)
   })
 
@@ -123,12 +123,12 @@ describe('level 1', () => {
 
   /** Every block a work train takes from entering to clearing its terminal. */
   const workTrainRun = (seed: number) => {
-    let state = step(empty, createInitialState(empty, seed), 0.1)
+    let state = runUntil(empty, createInitialState(empty, seed), (s) => s.trains.some((t) => t.work))
     const w = state.trains.find((t) => t.work)!
     const taken: RouteStep[] = []
-    // Follow this one train out; on an empty board another follows as soon as it's gone.
-    while (state.trains.some((t) => t.work) && state.workTrainsSent === 1) {
-      for (const s of state.trains.find((t) => t.work)!.path) {
+    // Follow this one train out; later work trains may join it on the board.
+    while (state.trains.some((t) => t.id === w.id)) {
+      for (const s of state.trains.find((t) => t.id === w.id)!.path) {
         if (!taken.some((t) => t.edgeId === s.edgeId && t.direction === s.direction)) taken.push(s)
       }
       state = step(empty, state, 0.1)
@@ -150,6 +150,20 @@ describe('level 1', () => {
     expect(routes.size).toBeGreaterThan(5)
   })
 
+  it('sends three waves of four trains, one from each terminal, each to a terminal it can reach', () => {
+    const terminals = ['EAST', 'SOUTHEAST', 'SOUTHWEST', 'WEST']
+    const waves = [['10:27', '10:30'], ['10:45', '10:47'], ['11:27', '11:38']]
+    for (const [i, window] of waves.entries()) {
+      const wave = level.schedule.filter((e) => Number(e.id.slice(1)) >= 19 + 4 * i && Number(e.id.slice(1)) < 23 + 4 * i)
+      expect(wave.map((e) => e.entry).sort()).toEqual(terminals)
+      for (const e of wave) {
+        expect(e.appearsBetween).toEqual(window)
+        expect(e.destination).not.toBe(e.entry)
+        expect(canReach(graph, entryStep(graph, e.entry), e.destination)).toBe(true)
+      }
+    }
+  })
+
   it('keeps the written timetable without a seed', () => {
     const timetable = buildTimetable(graph)
     for (const entry of level.schedule) {
@@ -166,6 +180,9 @@ describe('level 1', () => {
       T13: ['10:45', '11:40'],
       T14: ['10:20', '11:45'], T15: ['10:30', '11:55'],
       T16: ['09:55', '10:53'], T17: ['09:55', '10:53'], T18: ['09:55', '10:53'],
+      ...Object.fromEntries(['T19', 'T20', 'T21', 'T22'].map((id) => [id, ['10:27', '10:30']])),
+      ...Object.fromEntries(['T23', 'T24', 'T25', 'T26'].map((id) => [id, ['10:45', '10:47']])),
+      ...Object.fromEntries(['T27', 'T28', 'T29', 'T30'].map((id) => [id, ['11:27', '11:38']])),
     }
     const seen: Record<string, Set<number>> = {}
     for (let seed = 0; seed < 200; seed++) {
@@ -192,7 +209,9 @@ describe('level 1', () => {
 
   it('sends two trains, entering from the west, to the SE-Terminal', () => {
     const south = level.schedule.filter((e) => e.destination === 'SOUTHEAST')
-    expect(south.map((e) => [e.id, e.entry])).toEqual([['T10', 'WEST'], ['T11', 'WEST'], ['T17', 'SOUTHWEST']])
+    expect(south.map((e) => [e.id, e.entry])).toEqual([
+      ['T10', 'WEST'], ['T11', 'WEST'], ['T17', 'SOUTHWEST'], ['T22', 'SOUTHWEST'], ['T23', 'WEST'], ['T28', 'EAST'],
+    ])
     expect(graph.nodes.get('SOUTHEAST')?.color).toBeDefined()
   })
 
@@ -269,7 +288,12 @@ describe('level 1', () => {
 
   it('plays the written timetable through on time with meets in sidings C and D', () => {
     // The dispatched timetable alone: this fixed script can't steer round a work train in its way.
-    const graph = buildGraph({ ...level, workTrains: false })
+    // The three waves of four (T19–T30) all land together; this fixed script leaves them out.
+    const graph = buildGraph({
+      ...level,
+      workTrains: false,
+      schedule: level.schedule.filter((e) => Number(e.id.slice(1)) < 19),
+    })
     const routeWhenClear = (state: GameState, trainId: string, target: TrackPosition) =>
       route(graph, runUntil(graph, state, (s) => requestRoute(graph, s, trainId, target).ok), trainId, target)
     let state = createInitialState(graph)

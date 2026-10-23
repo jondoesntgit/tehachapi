@@ -150,7 +150,8 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
 }
 
 /** A work train goes out only when nothing is on the board or due for this long. */
-export const WORK_TRAIN_CLEAR_S = 5 * 60
+/** A work train goes out every this many minutes, picked at random each time. */
+export const WORK_TRAIN_EVERY_MIN: readonly [number, number] = [10, 20]
 /** Work trains run at 7.5 mph. */
 export const WORK_TRAIN_SPEED_MPS = 7.5 * 0.44704
 /**
@@ -159,7 +160,15 @@ export const WORK_TRAIN_SPEED_MPS = 7.5 * 0.44704
  * turn from a wye leg onto its tail track (~55°) stay open.
  */
 export const WORK_TRAIN_MAX_TURN_DEG = 60
-export const WORK_TRAIN_ID = 'W'
+/** Map label for every work train; ids are W1, W2, ... so several can run at once. */
+export const WORK_TRAIN_LABEL = 'W'
+
+/** Game time the next work train goes out, a random whole minute `WORK_TRAIN_EVERY_MIN` after `fromS`. */
+export function nextWorkTrainAt(seed: number, sent: number, fromS: number): number {
+  const [min, max] = WORK_TRAIN_EVERY_MIN
+  const random = seededRandom((seed ^ 0x77a1) + sent * 6151)
+  return fromS + (min + Math.floor(random() * (max - min + 1))) * 60
+}
 
 /** Steps a work train may take after `step`: no turn sharper than `WORK_TRAIN_MAX_TURN_DEG`. */
 function gentleSteps(graph: TrackGraph, step: RouteStep): RouteStep[] {
@@ -182,25 +191,26 @@ function gentlyReaches(graph: TrackGraph, step: RouteStep, terminalId: string): 
 }
 
 /**
- * When the board is empty and no scheduled train is due for `WORK_TRAIN_CLEAR_S`, sends a work train
- * in at a random terminal, bound for another, at `WORK_TRAIN_SPEED_MPS`. It holds only its entry
- * block at first; `extendWorkTrains` grants it one block ahead at a time.
+ * Every 10 to 20 minutes (`state.nextWorkTrainS`), while scheduled trains are still to come, sends a
+ * work train in at a random terminal whose entry block is free, bound for another, at
+ * `WORK_TRAIN_SPEED_MPS`. If every entry block is held it goes as soon as one frees. It holds only its
+ * entry block at first; `extendWorkTrains` grants it one block ahead at a time.
  */
 export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
-  if (!graph.level.workTrains || state.trains.length > 0 || state.pending.length === 0) return state
-  const nextS = nextArrivalS(state)
-  if (nextS === null || nextS - state.timeS < WORK_TRAIN_CLEAR_S) return state
+  if (!graph.level.workTrains || state.pending.length === 0 || state.timeS < state.nextWorkTrainS) return state
 
   const random = seededRandom((state.seed ^ 0x3017) + state.workTrainsSent * 7919)
   const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
-  const entry = terminals[Math.floor(random() * terminals.length)]
+  const open = terminals.filter((id) => state.reservations[entryStep(graph, id).edgeId] === undefined)
+  if (open.length === 0) return state
+  const entry = open[Math.floor(random() * open.length)]
   const first = entryStep(graph, entry)
-  if (state.reservations[first.edgeId] !== undefined) return state
   const exits = terminals.filter((id) => id !== entry && gentlyReaches(graph, first, id))
   if (exits.length === 0) return state
 
+  const id = `W${state.workTrainsSent + 1}`
   const train: Train = {
-    id: WORK_TRAIN_ID,
+    id,
     name: 'Work train',
     maxSpeedMps: WORK_TRAIN_SPEED_MPS,
     destination: exits[Math.floor(random() * exits.length)],
@@ -212,11 +222,13 @@ export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
     arrivedAtS: null,
     work: true,
   }
+  const sent = state.workTrainsSent + 1
   return {
     ...state,
     trains: [...state.trains, train],
-    reservations: { ...state.reservations, [first.edgeId]: WORK_TRAIN_ID },
-    workTrainsSent: state.workTrainsSent + 1,
+    reservations: { ...state.reservations, [first.edgeId]: id },
+    workTrainsSent: sent,
+    nextWorkTrainS: nextWorkTrainAt(state.seed, sent, state.timeS),
   }
 }
 
@@ -243,7 +255,7 @@ export function extendWorkTrains(graph: TrackGraph, state: GameState): GameState
       (step) => gentlyReaches(graph, step, train.destination) && (reservations[step.edgeId] ?? train.id) === train.id,
     )
     if (options.length === 0) continue
-    const random = seededRandom((state.seed ^ 0x3017) + state.workTrainsSent * 7919 + train.path.length * 104729)
+    const random = seededRandom((state.seed ^ 0x3017) + Number(train.id.slice(1)) * 7919 + train.path.length * 104729)
     const path = [...train.path, options[Math.floor(random() * options.length)]]
     const extended: Train = { ...train, path, stopAtM: workStop(graph, path) }
     trains = trains.map((t) => (t.id === train.id ? extended : t))
@@ -279,5 +291,6 @@ export function scoreArrival(train: Train, arrivedAtS: number, exitedAt: string)
 
 /** The game is over: every train is through, or the board deadlocked. */
 export function isLevelComplete(state: GameState): boolean {
-  return state.deadlocked || (state.pending.length === 0 && state.trains.length === 0)
+  // Work trains left running don't hold the game open.
+  return state.deadlocked || (state.pending.length === 0 && state.trains.every((t) => t.work))
 }

@@ -1,4 +1,5 @@
 import { locateOnPath, getEdge, pathPolyline, pointAt } from '../engine/trackGraph'
+import { WORK_TRAIN_LABEL } from '../engine/scheduler'
 import { useGameStore } from '../store'
 import type { CSSProperties } from 'react'
 import { LABEL_SIZE, pointsAttr, toView, trainColor } from './view'
@@ -26,7 +27,7 @@ export function TrainLayer() {
               points={pointsAttr(body)}
             />
             <text className="label train-label" x={head.x} y={head.y - 90} fontSize={LABEL_SIZE} textAnchor="middle">
-              {train.id}
+              {train.work ? WORK_TRAIN_LABEL : train.id}
             </text>
           </g>
         )
