@@ -149,6 +149,8 @@ describe('level 1', () => {
   })
 
   it('brings trains in early so at least four scheduled trains are always in play', () => {
+    // Trains are left standing here, which would otherwise end the game after 20 idle minutes.
+    const graph = buildGraph({ ...level, idleLimitMin: undefined })
     for (let seed = 0; seed < 20; seed++) {
       let state = createInitialState(graph, seed)
       const inPlay = (s: GameState) =>
@@ -200,6 +202,39 @@ describe('level 1', () => {
       }
       expect(pairs).toBeGreaterThanOrEqual(3)
     }
+  })
+
+  it('ends the game once no train has moved for 20 minutes', () => {
+    expect(level.idleLimitMin).toBe(20)
+    // At the start every train stands still; nothing is dispatched, so nothing moves again.
+    let state = createInitialState(graph, 5)
+    state = runUntil(graph, state, (s) => s.trains.length > 0 && s.trains.every((t) => t.speedMps === 0))
+    const stillFrom = state.timeS
+    state = runUntil(graph, state, (s) => s.stalled || s.trains.some((t) => t.speedMps > 0))
+    if (!state.stalled) {
+      // A train entered (and moved); the clock restarted from when it stopped.
+      state = runUntil(graph, state, (s) => s.stalled)
+    }
+    expect(state.stalled).toBe(true)
+    expect(isLevelComplete(state)).toBe(true)
+    expect(state.timeS - state.idleSinceS!).toBeGreaterThanOrEqual(20 * 60)
+    expect(state.timeS - stillFrom).toBeGreaterThanOrEqual(20 * 60)
+    // The game stands still from here.
+    expect(step(graph, state, 0.1)).toBe(state)
+  })
+
+  it('restarts the idle clock whenever any train moves', () => {
+    let state = createInitialState(graph, 5)
+    state = runUntil(graph, state, (s) => s.idleSinceS !== null)
+    const firstIdle = state.idleSinceS!
+    // Send one local home: it moves, so the board isn't idle.
+    const local = state.trains.find((t) => t.id.startsWith('L') && requestRoute(graph, state, t.id, exitFor(t.destination)).ok)!
+    state = route(graph, state, local.id, exitFor(local.destination))
+    state = runUntil(graph, state, (s) => s.trains.some((t) => t.speedMps > 0))
+    expect(state.idleSinceS).toBeNull()
+    state = runUntil(graph, state, (s) => s.idleSinceS !== null || s.stalled)
+    expect(state.stalled).toBe(false)
+    expect(state.idleSinceS!).toBeGreaterThan(firstIdle)
   })
 
   it('keeps the written timetable without a seed', () => {

@@ -81,7 +81,7 @@ export function Help({ onClose }: { onClose: () => void }) {
               only leave by the wrong terminal is refused, and moves its due time 3 minutes earlier.
               Every 10 to 20 minutes a work train (W) arrives at 7.5 mph, one at a time; route it like any other train. Your
               score at the end is 100, less every minute trains were late. If every train has entered and the ones on the board block each other with
-              no way forward, the game ends and 90 minutes are added to the late total.
+              no way forward, the game ends and 90 minutes are added to the late total. The game also ends if no train moves for 20 minutes.
             </p>
           </section>
 

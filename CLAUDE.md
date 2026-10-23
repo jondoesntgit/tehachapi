@@ -121,6 +121,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Work trains** (`spawnWorkTrain`, levels with `workTrains: true`): every 10 to 20 minutes (`WORK_TRAIN_EVERY_MIN`; `state.nextWorkTrainS` from `nextWorkTrainAt`), while scheduled trains are still pending and no other work train is on the board (`MAX_WORK_TRAINS` = 1; a due one waits until it has gone), a work train (ids `W1`, `W2`, …; labelled `W` on the map) enters at a random terminal whose entry block is free, bound for another it can reach, at 7.5 mph (`WORK_TRAIN_SPEED_MPS`). Like a scheduled train it pulls up at the far end of its entry block and waits; the dispatcher routes it like any other. It isn't scored, doesn't end fast-forward, doesn't hold the level open (`isLevelComplete` ignores work trains), and "Skip to next train" clears it away.
 - **Score:** `levelScore` = 100 less `lateTotal` (minutes late, plus 90 for a deadlock); the end-of-game panel shows it.
 - **Deadlock ends the game** (`isDeadlocked`, checked at the end of every `step`): once every scheduled train's entry time has passed (held-at-portal counts as launched), and every train on the board is stopped with no way forward (`canProgress`: no free block ahead with room that still leads to its destination), `state.deadlocked` is set. `step` then returns the state unchanged, `isLevelComplete` is true, and `DEADLOCK_PENALTY_MIN` (90) is added to the late total (`lateTotal`, `levelScore`). Reservations and the exact stop still make collisions and overruns impossible.
+- **Idle limit** (`checkIdle`, at the end of every `step`; level `idleLimitMin`, 20 in level 1): `state.idleSinceS` records when every train on the board last stood still (an empty board isn't idle); once that lasts `idleLimitMin`, `state.stalled` ends the game like a deadlock but with no penalty. The end panel says why.
 - **Fast-forward:** the store drops back to 1× whenever a train enters. "Skip to next train" only works while no dispatched train is on the board.
 
 ## Level file format (`levels/*.json`)
@@ -129,6 +130,7 @@ See `levels/level-01.json`. Key fields:
 - `startTime` — game clock at level start, `"HH:MM"`.
 - `workTrains` (optional) — send a work train every 10 to 20 minutes while scheduled trains are still to come.
 - `minTrainsOnBoard` (optional) — bring scheduled trains in early to keep at least this many in play.
+- `idleLimitMin` (optional) — end the game if trains are on the board but none has moved for this many minutes.
 - `appearsJitterMin` (optional) — max random shift, in minutes either way, applied to each scheduled train per game.
 - `trainLengthM`, `physics.accelMps2`, `physics.decelMps2`, `physics.stopMarginM`.
 - `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label?, color? }`. A terminal's `color` is the color of trains heading there (map, train list, help legend).

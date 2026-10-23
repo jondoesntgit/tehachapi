@@ -30,13 +30,15 @@ export function createInitialState(graph: TrackGraph, seed?: number): GameState 
     workTrainsSent: 0,
     nextWorkTrainS: nextWorkTrainAt(seed ?? 0, 0, parseClock(graph.level.startTime)),
     deadlocked: false,
+    idleSinceS: null,
+    stalled: false,
     results: [],
   }
 }
 
 /** Advances the whole game by `dtS` game seconds. */
 export function step(graph: TrackGraph, state: GameState, dtS: number): GameState {
-  if (state.deadlocked) return state
+  if (state.deadlocked || state.stalled) return state
   const { trainLengthM, physics } = graph.level
   const timeS = state.timeS + dtS
   const reservations = { ...state.reservations }
@@ -86,7 +88,8 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
   }
 
   const next = spawnWorkTrain(graph, spawnDue(graph, { ...state, timeS, trains, reservations, results }))
-  return isDeadlocked(graph, next) ? { ...next, deadlocked: true } : next
+  if (isDeadlocked(graph, next)) return { ...next, deadlocked: true }
+  return checkIdle(graph, next)
 }
 
 /**
@@ -101,4 +104,17 @@ export function skipToNextArrival(state: GameState, leadS = 10): GameState {
     Object.entries(state.reservations).filter(([, holder]) => !state.trains.some((t) => t.id === holder)),
   )
   return { ...state, trains: [], reservations, timeS: Math.max(state.timeS, nextS - leadS) }
+}
+
+/**
+ * Tracks how long every train on the board has stood still; once that reaches the level's
+ * `idleLimitMin`, the game is over (`stalled`). An empty board isn't idle.
+ */
+export function checkIdle(graph: TrackGraph, state: GameState): GameState {
+  const limitMin = graph.level.idleLimitMin
+  if (limitMin === undefined) return state
+  const allStill = state.trains.length > 0 && state.trains.every((t) => t.speedMps === 0)
+  if (!allStill) return state.idleSinceS === null ? state : { ...state, idleSinceS: null }
+  const idleSinceS = state.idleSinceS ?? state.timeS
+  return { ...state, idleSinceS, stalled: state.timeS - idleSinceS >= limitMin * 60 }
 }

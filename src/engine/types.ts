@@ -99,6 +99,8 @@ export interface Level {
   workTrains?: boolean
   /** Bring scheduled trains in early so at least this many are in play (see `bringTrainsForward`). */
   minTrainsOnBoard?: number
+  /** End the game if trains are on the board but none has moved for this many minutes. */
+  idleLimitMin?: number
 }
 
 /** 1 = travelling from the edge's `from` node toward `to`; -1 = the reverse. */
@@ -178,5 +180,9 @@ export interface GameState {
   nextWorkTrainS: number
   /** Every train was launched and the ones on the board blocked each other for good; the game is over. */
   deadlocked: boolean
+  /** Game time since which every train on the board has stood still, or null if one is moving or none are on it. */
+  idleSinceS: number | null
+  /** No train moved for the level's `idleLimitMin`; the game is over. */
+  stalled: boolean
   results: TrainResult[]
 }

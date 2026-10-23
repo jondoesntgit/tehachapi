@@ -267,8 +267,8 @@ export function scoreArrival(train: Train, arrivedAtS: number, exitedAt: string)
   }
 }
 
-/** The game is over: every train is through, or the board deadlocked. */
+/** The game is over: every train is through, the board deadlocked, or nothing moved for too long. */
 export function isLevelComplete(state: GameState): boolean {
   // Work trains left running don't hold the game open.
-  return state.deadlocked || (state.pending.length === 0 && state.trains.every((t) => t.work))
+  return state.deadlocked || state.stalled || (state.pending.length === 0 && state.trains.every((t) => t.work))
 }

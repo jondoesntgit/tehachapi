@@ -67,7 +67,13 @@ export function Hud() {
 
       {complete && (
         <div className="hud summary">
-          <h2>{game.deadlocked ? 'Deadlock — trains blocked each other' : 'Level complete'}</h2>
+          <h2>
+            {game.deadlocked
+              ? 'Deadlock — trains blocked each other'
+              : game.stalled
+                ? `Game over — no train moved for ${graph.level.idleLimitMin} minutes`
+                : 'Level complete'}
+          </h2>
           <p className="score">
             Your score is <b>{levelScore(game)}</b>
           </p>

@@ -326,3 +326,18 @@ describe('deadlock', () => {
     expect(state.timeS).toBeGreaterThanOrEqual(parseClock('11:00'))
   })
 })
+
+describe('idle limit', () => {
+  it('is off unless the level sets it: a still board runs on', () => {
+    let state = createInitialState(graph)
+    state = runUntil(graph, state, (s) => s.timeS >= parseClock('11:00'))
+    expect(state.stalled).toBe(false)
+  })
+
+  it('never counts an empty board as idle', () => {
+    const empty = buildGraph({ ...level, idleLimitMin: 20, startingTrains: [] })
+    const state = runUntil(empty, createInitialState(empty), (s) => s.timeS >= parseClock('10:30'))
+    expect(state.idleSinceS).toBeNull()
+    expect(state.stalled).toBe(false)
+  })
+})
