@@ -203,10 +203,10 @@ describe('work trains', () => {
     expect(Object.keys(later.reservations).filter((e) => later.reservations[e] === w.id)).toEqual([w.path[0].edgeId])
   })
 
-  it('is due out 40 minutes after it enters, and is scored like any train', () => {
+  it('is due out 65 minutes after it enters, and is scored like any train', () => {
     let state = firstWorkTrain(roomy)
     const w = workTrains(state)[0]
-    expect(w.dueAtS - state.timeS).toBe(40 * 60)
+    expect(w.dueAtS - state.timeS).toBe(65 * 60)
     state = route(roomy, state, w.id, exitOf(w.destination))
     state = runUntil(roomy, state, (s) => !s.trains.some((t) => t.id === w.id))
     expect(state.results).toEqual([expect.objectContaining({ trainId: w.id, exitedAt: w.destination, lateMinutes: 0 })])

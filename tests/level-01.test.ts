@@ -170,9 +170,9 @@ describe('level 1', () => {
     }
   })
 
-  it('needs four trains in play for the first 10 minutes, then one more every 10 minutes', () => {
+  it('needs four trains in play for the first 15 minutes, then one more every 15 minutes', () => {
     const startS = parseClock(level.startTime)
-    expect([0, 9, 10, 19, 20, 35, 60].map((m) => requiredTrains(graph, startS + m * 60))).toEqual([4, 4, 5, 5, 6, 7, 10])
+    expect([0, 14, 15, 29, 30, 45, 60].map((m) => requiredTrains(graph, startS + m * 60))).toEqual([4, 4, 5, 5, 6, 7, 8])
   })
 
   it('keeps each train brought forward on its time allowance', () => {

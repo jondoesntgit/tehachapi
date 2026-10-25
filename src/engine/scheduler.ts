@@ -190,7 +190,7 @@ export const WORK_TRAIN_EVERY_MIN: readonly [number, number] = [10, 20]
 /** Work trains run at 7.5 mph. */
 export const WORK_TRAIN_SPEED_MPS = 7.5 * 0.44704
 /** A work train is due out this long after it enters; past that it counts as late. */
-export const WORK_TRAIN_ALLOWANCE_S = 40 * 60
+export const WORK_TRAIN_ALLOWANCE_S = 65 * 60
 /** Only one work train on the board at a time; a due one waits until it has gone. */
 export const MAX_WORK_TRAINS = 1
 
