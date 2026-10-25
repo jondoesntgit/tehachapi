@@ -93,9 +93,17 @@ export interface Level {
    */
   appearsJitterMin?: number
   startingTrains?: StartingTrain[]
+  /**
+   * Edges a work train may start the game on (levels with `workTrains`). Defaults to every edge the
+   * starting trains may stand on (their `edge` and `edgeChoices`).
+   */
+  sidings?: string[]
   /** Extra text on the map, e.g. naming a branch. */
   labels?: MapLabel[]
-  /** Send a work train every 60 minutes while scheduled trains are still to come (see `spawnWorkTrain`). */
+  /**
+   * Start a work train on a free siding, then send another in 10 minutes after the last one is due,
+   * while scheduled trains are still to come (see `placeWorkTrainOnSiding`, `buildWorkTimetable`).
+   */
   workTrains?: boolean
   /** Bring scheduled trains in early so at least this many are in play (see `keepTrainsInPlay`). */
   minTrainsOnBoard?: number
@@ -160,6 +168,8 @@ export interface TrainResult {
 
 /** A work train in this game's work-train timetable, dealt at the start like the scheduled trains. */
 export interface WorkTrainPlan {
+  /** W2, W3, ... (W1 starts the game on a siding). */
+  id: string
   /** Terminal it enters at. */
   entry: string
   /** Terminal it is bound for. */

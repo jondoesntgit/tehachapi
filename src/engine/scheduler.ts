@@ -32,7 +32,7 @@ export function announcedTrains(graph: TrackGraph, state: GameState): Announceme
     })
   state.workTimetable.forEach((plan, i) => {
     if (i >= state.workTrainsSent && plan.appearsAtS <= state.timeS + ANNOUNCE_LEAD_S) {
-      announced.push({ id: `W${i + 1}`, ...plan, work: true })
+      announced.push({ ...plan, work: true })
     }
   })
   return announced.sort((a, b) => a.appearsAtS - b.appearsAtS)
@@ -265,30 +265,79 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
   return { trains, reservations }
 }
 
-/** A work train goes out every this many minutes (a range would be picked from at random each time). */
-export const WORK_TRAIN_EVERY_MIN: readonly [number, number] = [60, 60]
 /** Work trains run at 11.25 mph. */
 export const WORK_TRAIN_SPEED_MPS = 11.25 * 0.44704
-/** A work train is due out this long after it enters; past that it counts as late. */
+/** A work train is due out this long after it enters (or after the start, for the one on a siding). */
 export const WORK_TRAIN_ALLOWANCE_S = 65 * 60
+/** The next work train enters this long after the previous one is due out. */
+export const WORK_TRAIN_GAP_AFTER_DUE_S = 10 * 60
 /** Only one work train on the board at a time; a due one waits until it has gone. */
 export const MAX_WORK_TRAINS = 1
 
 /** Map label for every work train; ids are W1, W2, ... */
 export const WORK_TRAIN_LABEL = 'W'
 
-/** Game time the next work train goes out, a random whole minute `WORK_TRAIN_EVERY_MIN` after `fromS`. */
-export function nextWorkTrainAt(seed: number, sent: number, fromS: number): number {
-  const [min, max] = WORK_TRAIN_EVERY_MIN
-  const random = seededRandom((seed ^ 0x77a1) + sent * 6151)
-  return fromS + (min + Math.floor(random() * (max - min + 1))) * 60
+/** Terminals a train can leave by from `step`. */
+function exitsFrom(graph: TrackGraph, step: RouteStep): string[] {
+  return [...graph.nodes.values()]
+    .filter((n) => n.kind === 'terminal' && canReach(graph, step, n.id))
+    .map((n) => n.id)
+}
+
+/** Edges a work train may start on: the level's `sidings`, else wherever starting trains may stand. */
+export function sidingsOf(graph: TrackGraph): string[] {
+  const { sidings, startingTrains = [] } = graph.level
+  return sidings ?? [...new Set(startingTrains.flatMap((t) => [t.edge, ...(t.edgeChoices ?? [])]))]
 }
 
 /**
- * This game's work trains (levels with `workTrains`), dealt at the start from the seed alone so they
- * are the same for every player of a code: one every 60 minutes (`WORK_TRAIN_EVERY_MIN`) for as
- * long as scheduled trains are still to enter, each at a random terminal, bound for another it can
- * reach from there.
+ * The first work train, W1 (levels with `workTrains`): standing at the start on a random free
+ * siding long enough to hold it clear of both switches, bound for a random terminal it can reach,
+ * facing that way, due out `WORK_TRAIN_ALLOWANCE_S` after the start. Left out if no siding is free.
+ * It draws from its own random stream, so the timetable and starting trains are unchanged.
+ */
+export function placeWorkTrainOnSiding(
+  graph: TrackGraph,
+  seed: number,
+  placed: Pick<GameState, 'trains' | 'reservations'>,
+): Pick<GameState, 'trains' | 'reservations'> {
+  if (!graph.level.workTrains) return placed
+  const { trainLengthM } = graph.level
+  const random = seededRandom(seed ^ 0x51d1)
+  const free = sidingsOf(graph).filter((edgeId) => {
+    const edge = getEdge(graph, edgeId)
+    if (placed.reservations[edgeId] !== undefined || edge.lengthM < trainLengthM + 2 * STOP_CLEARANCE_M) return false
+    return ([1, -1] as Direction[]).some((direction) => exitsFrom(graph, { edgeId, direction }).length > 0)
+  })
+  if (free.length === 0) return placed
+  const edgeId = free[Math.floor(random() * free.length)]
+  const ways = ([1, -1] as Direction[]).flatMap((direction) =>
+    exitsFrom(graph, { edgeId, direction }).map((destination) => ({ direction, destination })),
+  )
+  const { direction, destination } = ways[Math.floor(random() * ways.length)]
+  const headM = getEdge(graph, edgeId).lengthM - STOP_CLEARANCE_M
+  const train: Train = {
+    id: 'W1',
+    name: 'Work train',
+    maxSpeedMps: WORK_TRAIN_SPEED_MPS,
+    destination,
+    dueAtS: parseClock(graph.level.startTime) + WORK_TRAIN_ALLOWANCE_S,
+    speedMps: 0,
+    path: [{ edgeId, direction }],
+    headM,
+    stopAtM: headM,
+    arrivedAtS: null,
+    work: true,
+  }
+  return { trains: [...placed.trains, train], reservations: { ...placed.reservations, [edgeId]: 'W1' } }
+}
+
+/**
+ * This game's work trains after W1 (levels with `workTrains`), dealt at the start from the seed
+ * alone so they are the same for every player of a code. Each enters `WORK_TRAIN_GAP_AFTER_DUE_S`
+ * after the previous one is due out (W1, on its siding, is due `WORK_TRAIN_ALLOWANCE_S` after the
+ * start), for as long as scheduled trains are still to enter, at a random terminal, bound for
+ * another it can reach from there.
  */
 export function buildWorkTimetable(
   graph: TrackGraph,
@@ -297,17 +346,17 @@ export function buildWorkTimetable(
 ): WorkTrainPlan[] {
   if (!graph.level.workTrains) return []
   const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
-  const exitsFrom = (entry: string) => terminals.filter((id) => id !== entry && canReach(graph, entryStep(graph, entry), id))
-  const entries = terminals.filter((id) => exitsFrom(id).length > 0)
+  const exitsAt = (entry: string) => exitsFrom(graph, entryStep(graph, entry)).filter((id) => id !== entry)
+  const entries = terminals.filter((id) => exitsAt(id).length > 0)
   if (entries.length === 0) return []
   const lastS = Math.max(...Object.values(timetable).map((e) => e.appearsAtS))
+  const everyS = WORK_TRAIN_ALLOWANCE_S + WORK_TRAIN_GAP_AFTER_DUE_S
   const plans: WorkTrainPlan[] = []
-  for (let atS = nextWorkTrainAt(seed, 0, parseClock(graph.level.startTime)); atS < lastS; ) {
+  for (let atS = parseClock(graph.level.startTime) + everyS; atS < lastS; atS += everyS) {
     const random = seededRandom((seed ^ 0x3017) + plans.length * 7919)
     const entry = entries[Math.floor(random() * entries.length)]
-    const exits = exitsFrom(entry)
-    plans.push({ entry, destination: exits[Math.floor(random() * exits.length)], appearsAtS: atS })
-    atS = nextWorkTrainAt(seed, plans.length, atS)
+    const exits = exitsAt(entry)
+    plans.push({ id: `W${plans.length + 2}`, entry, destination: exits[Math.floor(random() * exits.length)], appearsAtS: atS })
   }
   return plans
 }
@@ -329,7 +378,7 @@ export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
   const { decelMps2, stopMarginM } = graph.level.physics
   const edge = getEdge(graph, first.edgeId)
   const stopAtM = edge.lengthM - Math.min(STOP_CLEARANCE_M, edge.lengthM / 2)
-  const id = `W${state.workTrainsSent + 1}`
+  const { id } = plan
   const train: Train = {
     id,
     name: 'Work train',

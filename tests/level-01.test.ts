@@ -121,24 +121,34 @@ describe('level 1', () => {
     expect(again).toMatchObject({ ok: false, reason: 'wrong-destination' })
     expect(again.ok || again.state!.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(dueAtS - 6 * 60)
   })
-  it('deals a work train every 60 minutes, each bound for a terminal it can reach', () => {
+  it('starts a work train on a free siding, then sends one in 10 minutes after the last is due', () => {
     const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
+    const sidings = new Set<string>()
     const seen = new Set<string>()
     for (let seed = 0; seed < 30; seed++) {
       const state = createInitialState(graph, seed)
+      // W1 stands on a siding none of the starting trains took, facing a way to its destination.
+      const w1 = state.trains.find((t) => t.work)!
+      expect(w1).toMatchObject({ id: 'W1', speedMps: 0, dueAtS: parseClock(level.startTime) + 65 * 60 })
+      expect(level.startingTrains![0].edgeChoices).toContain(w1.path[0].edgeId)
+      expect(state.reservations[w1.path[0].edgeId]).toBe('W1')
+      expect(canReach(graph, w1.path[0], w1.destination)).toBe(true)
+      sidings.add(w1.path[0].edgeId)
+      // Then one at a terminal 10 minutes after the one before is due, while trains are still to come.
       const lastS = Math.max(...Object.values(state.timetable).map((e) => e.appearsAtS))
       expect(state.workTimetable.length).toBeGreaterThanOrEqual(1)
-      let prevS = parseClock(level.startTime)
+      let prevDueS = w1.dueAtS
       for (const plan of state.workTimetable) {
         expect(terminals).toContain(plan.entry)
         expect(plan.destination).not.toBe(plan.entry)
         expect(canReach(graph, entryStep(graph, plan.entry), plan.destination)).toBe(true)
-        expect(plan.appearsAtS - prevS).toBe(60 * 60)
+        expect(plan.appearsAtS).toBe(prevDueS + 10 * 60)
         expect(plan.appearsAtS).toBeLessThan(lastS)
-        prevS = plan.appearsAtS
+        prevDueS = plan.appearsAtS + 65 * 60
         seen.add(plan.destination)
       }
     }
+    expect(sidings.size).toBeGreaterThan(2)
     expect(seen.size).toBeGreaterThan(2)
   })
 

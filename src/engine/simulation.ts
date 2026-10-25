@@ -5,6 +5,7 @@ import {
   buildTimetable,
   buildWorkTimetable,
   keepTrainsInPlay,
+  placeWorkTrainOnSiding,
   nextArrivalS,
   placeStartingTrains,
   scoreArrival,
@@ -19,15 +20,15 @@ export const FIXED_DT_S = 0.1
 
 /**
  * A fresh game. `seed` randomizes when scheduled trains enter (`buildTimetable`, then
- * `keepTrainsInPlay`), the work trains (`buildWorkTimetable`) and where starting trains stand
- * (`placeStartingTrains`). Nothing later changes when a train is due to enter.
+ * `keepTrainsInPlay`), the work trains (`placeWorkTrainOnSiding`, `buildWorkTimetable`) and where
+ * starting trains stand (`placeStartingTrains`). Nothing later changes when a train is due to enter.
  */
 export function createInitialState(graph: TrackGraph, seed?: number): GameState {
   // Every entry time is fixed here, from the seed alone, so it never depends on how the game is played.
   const timetable = keepTrainsInPlay(graph, buildTimetable(graph, seed))
   return {
     timeS: parseClock(graph.level.startTime),
-    ...placeStartingTrains(graph, seed),
+    ...placeWorkTrainOnSiding(graph, seed ?? 0, placeStartingTrains(graph, seed)),
     pending: graph.level.schedule.map((entry) => entry.id),
     timetable,
     seed: seed ?? 0,

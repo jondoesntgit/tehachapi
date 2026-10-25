@@ -77,7 +77,7 @@ export function Help({ onClose }: { onClose: () => void }) {
               another train is in the way or the train cannot stop in time. Sending a train where it could
               only leave by the wrong terminal is refused, and moves its due time 3 minutes earlier.
               Every train is announced at the terminal it will enter by, 10 minutes ahead, with a countdown.
-            Every 60 minutes a work train (W) arrives at 11.25 mph, one at a time, in its destination’s color; route it like any other train. It has 65 minutes to clear before it counts as late. More trains are kept in play as the game goes on: at least 4 at first, one more every 15 minutes. Your
+            A work train (W) starts on a siding with 65 minutes to clear before it counts as late; the next arrives 10 minutes after that one is due, and so on. They run at 11.25 mph, one at a time, in their destination’s color; route them like any other train. More trains are kept in play as the game goes on: at least 4 at first, one more every 15 minutes. Your
               score at the end is 100, less every minute trains were late. If every train has entered and the ones on the board block each other with
               no way forward, the game ends and 90 minutes are added to the late total. The game also ends if no train moves for 20 minutes.
             </p>
