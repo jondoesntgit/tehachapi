@@ -67,31 +67,37 @@ export function nextArrivalS(state: GameState): number | null {
  * A train whose entry block is reserved stays pending.
  */
 /**
- * Keeps at least `minTrainsOnBoard` scheduled trains in play (on the board, or due and waiting at
- * their portal). While there are fewer, the earliest pending train whose entry block is free is
- * brought forward to now; its due time moves with it, so it keeps its time allowance.
+ * How many scheduled trains must be in play at `timeS`: `minTrainsOnBoard`, plus one more for every
+ * `minTrainsRampEveryMin` minutes since the level started.
+ */
+export function requiredTrains(graph: TrackGraph, timeS: number): number {
+  const { minTrainsOnBoard = 0, minTrainsRampEveryMin, startTime } = graph.level
+  if (!minTrainsRampEveryMin) return minTrainsOnBoard
+  const elapsedS = Math.max(0, timeS - parseClock(startTime))
+  return minTrainsOnBoard + Math.floor(elapsedS / (minTrainsRampEveryMin * 60))
+}
+
+/**
+ * Keeps at least `requiredTrains` scheduled trains in play (on the board, or due and waiting at
+ * their portal). While there are fewer, the earliest pending trains are brought forward to now
+ * (queuing at their portal if their entry block is taken); due times move with them, so each keeps
+ * its time allowance.
  */
 export function bringTrainsForward(graph: TrackGraph, state: GameState): GameState {
-  const min = graph.level.minTrainsOnBoard ?? 0
+  const min = requiredTrains(graph, state.timeS)
   const inPlay = state.trains.filter((t) => !t.work).length + heldAtPortal(graph, state).length
   if (inPlay >= min) return state
-  const usedEntries = new Set<string>()
+  // The next ones due come in now; any whose entry block is taken queue at their portal.
   let timetable = state.timetable
-  let count = inPlay
   const waiting = state.pending
     .filter((id) => timetable[id].appearsAtS > state.timeS)
     .sort((a, b) => timetable[a].appearsAtS - timetable[b].appearsAtS)
+    .slice(0, min - inPlay)
   for (const id of waiting) {
-    if (count >= min) break
-    const edgeId = entryStep(graph, getScheduleEntry(graph, id).entry).edgeId
-    if (state.reservations[edgeId] !== undefined || usedEntries.has(edgeId)) continue
-    usedEntries.add(edgeId)
     const { appearsAtS, dueAtS } = timetable[id]
-    const earlierS = appearsAtS - state.timeS
-    timetable = { ...timetable, [id]: { appearsAtS: state.timeS, dueAtS: dueAtS - earlierS } }
-    count++
+    timetable = { ...timetable, [id]: { appearsAtS: state.timeS, dueAtS: dueAtS - (appearsAtS - state.timeS) } }
   }
-  return timetable === state.timetable ? state : { ...state, timetable }
+  return waiting.length === 0 ? state : { ...state, timetable }
 }
 
 export function spawnDue(graph: TrackGraph, rawState: GameState): GameState {
@@ -183,6 +189,8 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
 export const WORK_TRAIN_EVERY_MIN: readonly [number, number] = [10, 20]
 /** Work trains run at 7.5 mph. */
 export const WORK_TRAIN_SPEED_MPS = 7.5 * 0.44704
+/** A work train is due out this long after it enters; past that it counts as late. */
+export const WORK_TRAIN_ALLOWANCE_S = 40 * 60
 /** Only one work train on the board at a time; a due one waits until it has gone. */
 export const MAX_WORK_TRAINS = 1
 
@@ -200,7 +208,8 @@ export function nextWorkTrainAt(seed: number, sent: number, fromS: number): numb
  * Every 10 to 20 minutes (`state.nextWorkTrainS`), while scheduled trains are still to come and no
  * other work train is on the board, sends a work train in at a random terminal whose entry block is
  * free, bound for another it can reach, at `WORK_TRAIN_SPEED_MPS`. Like a scheduled train it pulls
- * up at the far end of its entry block and waits for the dispatcher; it is not scored.
+ * up at the far end of its entry block and waits for the dispatcher. It is due out
+ * `WORK_TRAIN_ALLOWANCE_S` after entering and is scored like any train.
  */
 export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
   if (!graph.level.workTrains || state.pending.length === 0 || state.timeS < state.nextWorkTrainS) return state
@@ -224,7 +233,7 @@ export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
     name: 'Work train',
     maxSpeedMps: WORK_TRAIN_SPEED_MPS,
     destination: exits[Math.floor(random() * exits.length)],
-    dueAtS: state.timeS,
+    dueAtS: state.timeS + WORK_TRAIN_ALLOWANCE_S,
     speedMps: Math.min(WORK_TRAIN_SPEED_MPS, safeSpeed(stopAtM, decelMps2, stopMarginM)),
     path: [first],
     headM: 0,

@@ -7,6 +7,7 @@
   "appearsJitterMin": 3,
   "workTrains": true,
   "minTrainsOnBoard": 4,
+  "minTrainsRampEveryMin": 10,
   "idleLimitMin": 20,
   "nodes": [
     { "id": "WEST",  "x": 0,    "y": 0, "kind": "terminal", "label": "West Terminal", "color": "#ff9640" },

@@ -203,12 +203,13 @@ describe('work trains', () => {
     expect(Object.keys(later.reservations).filter((e) => later.reservations[e] === w.id)).toEqual([w.path[0].edgeId])
   })
 
-  it('goes where the dispatcher sends it, and is not scored', () => {
+  it('is due out 40 minutes after it enters, and is scored like any train', () => {
     let state = firstWorkTrain(roomy)
     const w = workTrains(state)[0]
+    expect(w.dueAtS - state.timeS).toBe(40 * 60)
     state = route(roomy, state, w.id, exitOf(w.destination))
     state = runUntil(roomy, state, (s) => !s.trains.some((t) => t.id === w.id))
-    expect(state.results).toEqual([])
+    expect(state.results).toEqual([expect.objectContaining({ trainId: w.id, exitedAt: w.destination, lateMinutes: 0 })])
     expect(Object.values(state.reservations)).not.toContain(w.id)
   })
 
@@ -240,7 +241,7 @@ describe('work trains', () => {
     const exit = { edgeId: 'M5', offsetM: 900 }
     while (!requestRoute(one, state, 'T1', exit).ok) state = sendWorkTrains(step(one, state, 0.1))
     state = route(one, state, 'T1', exit)
-    state = runUntil(one, state, (s) => s.results.length === 1)
+    state = runUntil(one, state, (s) => s.results.some((r) => r.trainId === 'T1'))
     expect(isLevelComplete(state)).toBe(true)
     const later = runUntil(one, state, (s) => s.timeS >= state.timeS + 40 * 60)
     expect(later.workTrainsSent).toBe(sent)

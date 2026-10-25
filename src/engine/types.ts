@@ -99,6 +99,8 @@ export interface Level {
   workTrains?: boolean
   /** Bring scheduled trains in early so at least this many are in play (see `bringTrainsForward`). */
   minTrainsOnBoard?: number
+  /** Raise `minTrainsOnBoard` by one every this many minutes (see `requiredTrains`). */
+  minTrainsRampEveryMin?: number
   /** End the game if trains are on the board but none has moved for this many minutes. */
   idleLimitMin?: number
 }
@@ -141,7 +143,7 @@ export interface Train {
   stopAtM: number | null
   /** Game time the head reached the exit terminal, once it has. */
   arrivedAtS: number | null
-  /** A work train: sent in by the game every so often, dispatched like any other, not scored. */
+  /** A work train: sent in by the game every so often, dispatched and scored like any other. */
   work?: boolean
 }
 

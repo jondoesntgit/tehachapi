@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
 import { canReach, findSteps, hasRoom, requestRoute } from '../src/engine/routing'
-import { buildTimetable, entryStep, isLevelComplete } from '../src/engine/scheduler'
+import { buildTimetable, entryStep, isLevelComplete, requiredTrains } from '../src/engine/scheduler'
 import { createInitialState, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, nextSteps } from '../src/engine/trackGraph'
 import type { GameState, TrackPosition } from '../src/engine/types'
@@ -148,7 +148,7 @@ describe('level 1', () => {
     }
   })
 
-  it('brings trains in early so at least four scheduled trains are always in play', () => {
+  it('brings trains in early so the rising minimum of scheduled trains is always in play', () => {
     // Trains are left standing here, which would otherwise end the game after 20 idle minutes.
     const graph = buildGraph({ ...level, idleLimitMin: undefined })
     for (let seed = 0; seed < 20; seed++) {
@@ -158,7 +158,9 @@ describe('level 1', () => {
       // Sample the first hour, sending every train that can leave straight out, as a player might.
       for (let i = 0; i < 60; i++) {
         state = runUntil(graph, state, (s) => s.timeS >= state.timeS + 60)
-        if (state.pending.length >= 4) expect(inPlay(state)).toBeGreaterThanOrEqual(4)
+        // While enough trains remain to be brought in, the board holds at least the rising minimum.
+        const need = requiredTrains(graph, state.timeS)
+        if (state.pending.length >= need) expect(inPlay(state)).toBeGreaterThanOrEqual(need)
         for (const t of state.trains.filter((t) => !t.work && t.speedMps === 0)) {
           const exit = exitFor(t.destination)
           const r = requestRoute(graph, state, t.id, exit)
@@ -166,6 +168,11 @@ describe('level 1', () => {
         }
       }
     }
+  })
+
+  it('needs four trains in play for the first 10 minutes, then one more every 10 minutes', () => {
+    const startS = parseClock(level.startTime)
+    expect([0, 9, 10, 19, 20, 35, 60].map((m) => requiredTrains(graph, startS + m * 60))).toEqual([4, 4, 5, 5, 6, 7, 10])
   })
 
   it('keeps each train brought forward on its time allowance', () => {
@@ -351,6 +358,8 @@ describe('level 1', () => {
   })
 
   it('brings trains in at their shifted times', () => {
+    // Without the minimum in play, which would bring trains in sooner.
+    const graph = buildGraph({ ...level, minTrainsOnBoard: 0, minTrainsRampEveryMin: undefined })
     const state = createInitialState(graph, 42)
     const t1 = state.timetable.T1.appearsAtS
     const before = runUntil(graph, state, (s) => s.timeS >= t1 - 1)
@@ -367,6 +376,7 @@ describe('level 1', () => {
       ...level,
       workTrains: false,
       minTrainsOnBoard: 0,
+      minTrainsRampEveryMin: undefined,
       schedule: level.schedule.filter((e) => Number(e.id.slice(1)) < 19),
     })
     const routeWhenClear = (state: GameState, trainId: string, target: TrackPosition) =>

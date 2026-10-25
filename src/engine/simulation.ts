@@ -67,9 +67,7 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
         // Tail is through the portal: the train is gone.
         for (const s of path) delete reservations[s.edgeId]
         const last = path[path.length - 1]
-        if (!train.work) {
-          results.push(scoreArrival(train, arrivedAtS, stepEndNode(getEdge(graph, last.edgeId), last.direction)))
-        }
+        results.push(scoreArrival(train, arrivedAtS, stepEndNode(getEdge(graph, last.edgeId), last.direction)))
         continue
       }
     }

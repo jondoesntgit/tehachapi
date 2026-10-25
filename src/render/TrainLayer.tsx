@@ -34,7 +34,7 @@ export function TrainLayer() {
               points={pointsAttr(body)}
             />
             <text className="label train-label" x={head.x} y={head.y - 90} fontSize={LABEL_SIZE} textAnchor="middle">
-              {train.work ? WORK_TRAIN_LABEL : `${train.id} · ${dueIn(train.dueAtS, timeS)}`}
+              {`${train.work ? WORK_TRAIN_LABEL : train.id} · ${dueIn(train.dueAtS, timeS)}`}
             </text>
           </g>
         )
