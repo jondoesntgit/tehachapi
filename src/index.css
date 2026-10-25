@@ -369,3 +369,99 @@ button:disabled {
 .lock {
   font-size: 11px;
 }
+
+/* Tournament */
+.badge {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+.tournament p {
+  margin: 8px 0;
+}
+
+.tournament-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+}
+
+.tournament-columns section {
+  flex: 1 1 260px;
+}
+
+.game-code {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.link {
+  margin: 4px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.tournament-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.code-form {
+  display: flex;
+  gap: 8px;
+}
+
+.code-form input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  /* 16px or more stops iOS Safari zooming in when the field is focused. */
+  font: inherit;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.code-form input::placeholder {
+  color: var(--muted);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.hint.error {
+  color: var(--late);
+}
+
+.leave {
+  margin-top: 8px;
+}
+
+.code-inline {
+  color: var(--text);
+  letter-spacing: 0.08em;
+}
+
+.summary .hint {
+  margin: 4px 0 0;
+}

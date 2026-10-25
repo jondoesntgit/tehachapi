@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import level01 from '../levels/level-01.json'
+import { normalizeGameCode, randomGameCode, seedFromGameCode } from './engine/gameCode'
 import { requestRoute, WRONG_DESTINATION_PENALTY_S, type RouteFailure } from './engine/routing'
 import { createInitialState, FIXED_DT_S, skipToNextArrival, step } from './engine/simulation'
 import { buildGraph, type TrackGraph } from './engine/trackGraph'
@@ -20,6 +21,12 @@ interface GameStore {
   message: string | null
   /** The help panel is open; the simulation is paused while it is. */
   helpOpen: boolean
+  /** This game's code; the same code always deals the same game. */
+  gameCode: string
+  /** Tournament mode: restarting replays `gameCode` rather than dealing a new one. */
+  tournament: boolean
+  /** The tournament panel is open; the simulation is paused while it is. */
+  tournamentOpen: boolean
   /** Terminal id -> trains that have entered there; the map pulses a terminal when it changes. */
   entryCounts: Record<string, number>
   /** Advances the simulation by a frame's worth of real time. */
@@ -30,13 +37,48 @@ interface GameStore {
   skipAhead: () => void
   clearMessage: () => void
   setHelpOpen: (open: boolean) => void
+  /** Starts over: the same code in tournament mode, a new one otherwise. */
   restart: () => void
+  /** Enters tournament mode and starts the game for `text`; false if it isn't a usable code. */
+  playCode: (text: string) => boolean
+  /** Leaves tournament mode and deals a new game. */
+  leaveTournament: () => void
+  setTournamentOpen: (open: boolean) => void
 }
 
 const graph = buildGraph(level01 as Level)
 
-/** Each game gets its own seed, so trains enter at different times every play. */
-const newGame = (graph: TrackGraph) => createInitialState(graph, Math.floor(Math.random() * 2 ** 32))
+/** The game a code deals. Every game gets a code, so any game can be shared and replayed. */
+const newGame = (graph: TrackGraph, code: string) => createInitialState(graph, seedFromGameCode(code))
+
+const freshCode = () => randomGameCode(Math.random)
+
+/** A tournament link (`?code=K7Q2MX`) starts that game in tournament mode. */
+function codeFromUrl(): string | null {
+  const text = new URLSearchParams(window.location.search).get('code')
+  return text === null ? null : normalizeGameCode(text)
+}
+
+/** Keeps `?code=` in the address bar in step with tournament mode, so the page link can be shared. */
+function syncUrl(code: string | null) {
+  const url = new URL(window.location.href)
+  if (code) url.searchParams.set('code', code)
+  else url.searchParams.delete('code')
+  window.history.replaceState(null, '', url)
+}
+
+/** The address that opens `code` in tournament mode. */
+export function tournamentLink(code: string): string {
+  const url = new URL(window.location.href)
+  url.search = ''
+  url.hash = ''
+  url.searchParams.set('code', code)
+  return url.toString()
+}
+
+const linkedCode = codeFromUrl()
+const initialCode = linkedCode ?? freshCode()
+syncUrl(linkedCode)
 
 // Game time owed to the simulation but not yet a whole fixed step.
 let accumulatorS = 0
@@ -70,17 +112,20 @@ function failureMessage(
 
 export const useGameStore = create<GameStore>((set, get) => ({
   graph,
-  game: newGame(graph),
+  game: newGame(graph, initialCode),
   selectedTrainId: null,
   timeScale: 1,
   speedLocked: false,
   message: null,
   helpOpen: false,
+  gameCode: initialCode,
+  tournament: linkedCode !== null,
+  tournamentOpen: false,
   entryCounts: {},
 
   tick: (realDtS) => {
-    const { graph, game, timeScale, speedLocked, selectedTrainId, helpOpen } = get()
-    if (helpOpen) return
+    const { graph, game, timeScale, speedLocked, selectedTrainId, helpOpen, tournamentOpen } = get()
+    if (helpOpen || tournamentOpen) return
     accumulatorS += Math.min(realDtS, MAX_FRAME_S) * timeScale
     let next = game
     while (accumulatorS >= FIXED_DT_S) {
@@ -134,7 +179,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setHelpOpen: (helpOpen) => set({ helpOpen }),
 
   restart: () => {
-    accumulatorS = 0
-    set({ game: newGame(get().graph), selectedTrainId: null, timeScale: 1, speedLocked: false, message: null })
+    const { tournament, gameCode } = get()
+    startGame(tournament ? gameCode : freshCode(), tournament)
   },
+
+  playCode: (text) => {
+    const code = normalizeGameCode(text)
+    if (!code) return false
+    startGame(code, true)
+    return true
+  },
+
+  leaveTournament: () => startGame(freshCode(), false),
+
+  setTournamentOpen: (tournamentOpen) => set({ tournamentOpen }),
 }))
+
+/** Deals the game for `code` from the start. */
+function startGame(code: string, tournament: boolean) {
+  accumulatorS = 0
+  syncUrl(tournament ? code : null)
+  useGameStore.setState({
+    game: newGame(useGameStore.getState().graph, code),
+    gameCode: code,
+    tournament,
+    tournamentOpen: false,
+    selectedTrainId: null,
+    timeScale: 1,
+    speedLocked: false,
+    message: null,
+    entryCounts: {},
+  })
+}

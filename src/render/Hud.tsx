@@ -10,6 +10,7 @@ import {
 } from '../engine/scheduler'
 import { TIME_SCALES, useGameStore } from '../store'
 import { Help } from './Help'
+import { Tournament } from './Tournament'
 
 const MESSAGE_MS = 3000
 /** The speed a double tap holds. */
@@ -23,7 +24,10 @@ export function Hud() {
   const message = useGameStore((s) => s.message)
   const helpOpen = useGameStore((s) => s.helpOpen)
   const speedLocked = useGameStore((s) => s.speedLocked)
-  const { setTimeScale, skipAhead, clearMessage, setHelpOpen, restart } = useGameStore.getState()
+  const gameCode = useGameStore((s) => s.gameCode)
+  const tournament = useGameStore((s) => s.tournament)
+  const tournamentOpen = useGameStore((s) => s.tournamentOpen)
+  const { setTimeScale, skipAhead, clearMessage, setHelpOpen, setTournamentOpen, restart } = useGameStore.getState()
 
   // Two taps on 5× in quick succession hold it there, even when trains enter.
   const lastTap = useRef<{ scale: number; at: number } | null>(null)
@@ -48,7 +52,13 @@ export function Hud() {
     <>
       <header className="hud hud-top">
         <div className="clock">{formatClock(game.timeS, true)}</div>
-        <div className="title">{graph.level.title}</div>
+        <div className="title">
+          {tournament ? (
+            <span className="badge">🏆 {gameCode}</span>
+          ) : (
+            graph.level.title
+          )}
+        </div>
         <div className="buttons">
           {TIME_SCALES.map((scale) => (
             <button
@@ -62,6 +72,9 @@ export function Hud() {
           ))}
           <button disabled={!canSkip} onClick={skipAhead} aria-label="Skip to next train">
             ⏭
+          </button>
+          <button className={tournament ? 'active' : ''} onClick={() => setTournamentOpen(true)} aria-label="Tournament">
+            🏆
           </button>
           <button onClick={() => setHelpOpen(true)} aria-label="Help">
             ?
@@ -91,11 +104,18 @@ export function Hud() {
             100, less {lateTotal(game)} minutes late in all
             {game.deadlocked && ` (including ${DEADLOCK_PENALTY_MIN} for the deadlock)`}
           </p>
-          <button onClick={restart}>Play again</button>
+          <p className="hint">
+            {tournament ? 'Tournament' : 'Game'} code <b className="code-inline">{gameCode}</b>
+          </p>
+          <div className="tournament-buttons">
+            <button onClick={restart}>{tournament ? `Replay ${gameCode}` : 'Play again'}</button>
+            <button onClick={() => setTournamentOpen(true)}>Tournament…</button>
+          </div>
         </div>
       )}
 
       {helpOpen && <Help onClose={() => setHelpOpen(false)} />}
+      {tournamentOpen && <Tournament onClose={() => setTournamentOpen(false)} />}
     </>
   )
 }

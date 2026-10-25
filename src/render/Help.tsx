@@ -72,6 +72,8 @@ export function Help({ onClose }: { onClose: () => void }) {
               <dd>Game speed. Drops back to 1× whenever a train enters, unless you double-tap 5×: that holds 5× until you pick another speed.</dd>
               <dt>⏭</dt>
               <dd>Skip to the next train. Only works while the board is empty.</dd>
+              <dt>🏆</dt>
+              <dd>Tournament: see this game’s code, share it, restart it, or play a code someone gave you. Everyone on the same code gets the same game.</dd>
               <dt>?</dt>
               <dd>This help. The game pauses while it is open.</dd>
             </dl>
