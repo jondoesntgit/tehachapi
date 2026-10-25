@@ -82,10 +82,34 @@ describe('requestRoute', () => {
   it('turns a target at the far terminal into an exit', () => {
     const state = route(graph, withT1(), 'T1', { edgeId: 'M5', offsetM: 1000 })
     expect(state.trains[0].stopAtM).toBeNull()
-    expect(requestRoute(graph, state, 'T1', { edgeId: 'M3', offsetM: 100 })).toMatchObject({
-      ok: false,
-      reason: 'departing',
+  })
+
+  it('reroutes a train on its way out, until its head reaches the terminal', () => {
+    let state = route(graph, withT1(), 'T1', { edgeId: 'M5', offsetM: 1000 })
+    // Still on its way: it can be sent into siding B instead, and stops there.
+    const rerouted = route(graph, state, 'T1', { edgeId: 'SIDING_B', offsetM: 600 })
+    expect(rerouted.trains[0].stopAtM).not.toBeNull()
+    expect(rerouted.trains[0].path.at(-1)!.edgeId).toBe('SIDING_B')
+    expect(Object.keys(rerouted.reservations)).not.toContain('M5')
+    const parked = runUntil(graph, rerouted, (s) => s.trains[0].speedMps === 0)
+    expect(parked.trains[0].headM).toBe(parked.trains[0].stopAtM)
+    // Once its head is at the terminal, it is past changing.
+    state = runUntil(graph, state, (s) => s.trains[0].arrivedAtS !== null)
+    expect(requestRoute(graph, state, 'T1', { edgeId: 'M5', offsetM: 100 })).toMatchObject({ ok: false, reason: 'departing' })
+  })
+
+  it('refuses to reroute a leaving train somewhere it cannot brake for in time', () => {
+    // T3 (27 m/s) flat out on its way east, too close to stop at the end of siding B's block.
+    const fast = buildGraph({ ...level, startingTrains: [], schedule: [{ ...level.schedule[2], appearsAt: '10:00' }] })
+    let state = runUntil(fast, createInitialState(fast), (s) => s.trains.length > 0 && s.trains[0].speedMps === 0)
+    state = route(fast, state, 'T3', { edgeId: 'M5', offsetM: 1000 })
+    // 500 m into M4 at about 27 m/s: ~680 m left to stop in, but it needs over 1000 m.
+    state = runUntil(fast, state, (s) => {
+      const at = locateOnPath(fast, s.trains[0].path, s.trains[0].headM)
+      return at.edgeId === 'M4' && at.offsetM >= 500
     })
+    expect(state.trains[0].speedMps).toBeGreaterThan(25)
+    expect(requestRoute(fast, state, 'T3', { edgeId: 'M4', offsetM: 600 })).toMatchObject({ ok: false, reason: 'too-close' })
   })
 
   it('refuses a target behind the head', () => {

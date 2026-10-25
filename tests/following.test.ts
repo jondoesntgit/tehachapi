@@ -221,3 +221,24 @@ describe('following in full games', () => {
     // Five whole games: a few seconds here, longer on CI's slower runners.
   }, 60_000)
 })
+
+describe('rerouting a leaving train to let another pass', () => {
+  it('sends a slow train bound across the map into a siding, and a fast one passes it', () => {
+    const g = layout(3.35, 27, '10:08')
+    let state = createInitialState(g)
+    state = runUntil(g, state, (s) => find(s, 'S') !== undefined && stopped('S')(s))
+    state = route(g, state, 'S', EAST_EXIT)
+    state = runUntil(g, state, (s) => find(s, 'F') !== undefined && stopped('F')(s))
+    // F follows S out; then S, still on its way, is sent into siding B instead.
+    state = route(g, state, 'F', EAST_EXIT)
+    state = route(g, state, 'S', { edgeId: 'SIDING_B', offsetM: 600 })
+    state = runUntil(g, state, (s) => s.results.some((r) => r.trainId === 'F'))
+    // F got out first, while S was turned into siding B, where it pulls up and waits.
+    expect(state.results.map((r) => r.trainId)).toEqual(['F'])
+    expect(find(state, 'S')!.path.at(-1)!.edgeId).toBe('SIDING_B')
+    state = runUntil(g, state, stopped('S'))
+    const s = find(state, 'S')!
+    expect(s.headM).toBe(s.stopAtM)
+    expect(locateOnPath(g, s.path, s.headM).edgeId).toBe('SIDING_B')
+  })
+})

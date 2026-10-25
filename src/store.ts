@@ -99,7 +99,7 @@ function failureMessage(
     case 'too-close':
       return 'Too close to stop there'
     case 'departing':
-      return 'Train is already leaving'
+      return 'Train is already at the terminal'
     case 'no-path':
       return 'No route there — trains cannot reverse'
     case 'wrong-destination': {

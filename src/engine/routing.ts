@@ -22,7 +22,7 @@ export type RouteFailure =
   | 'blocked'
   /** The train is moving too fast to stop at the target. */
   | 'too-close'
-  /** The train is already leaving through a terminal. */
+  /** The train's head has already reached the terminal it is leaving by. */
   | 'departing'
   /** From the target the train could only leave through a terminal other than its destination. */
   | 'wrong-destination'
@@ -219,7 +219,8 @@ export function requestRoute(
 ): RouteResult {
   const train = state.trains.find((t) => t.id === trainId)
   if (!train) return { ok: false, reason: 'no-path' }
-  if (train.stopAtM === null) return { ok: false, reason: 'departing' }
+  // A train on its way out can still be rerouted, until its head reaches the terminal.
+  if (train.arrivedAtS !== null) return { ok: false, reason: 'departing' }
 
   const head = locateStep(graph, train.path, train.headM)
   const headStep = train.path[head.index]
