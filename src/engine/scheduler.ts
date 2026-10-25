@@ -265,10 +265,10 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
   return { trains, reservations }
 }
 
-/** A work train goes out every this many minutes, picked at random each time. */
-export const WORK_TRAIN_EVERY_MIN: readonly [number, number] = [10, 20]
-/** Work trains run at 7.5 mph. */
-export const WORK_TRAIN_SPEED_MPS = 7.5 * 0.44704
+/** A work train goes out every this many minutes (a range would be picked from at random each time). */
+export const WORK_TRAIN_EVERY_MIN: readonly [number, number] = [60, 60]
+/** Work trains run at 11.25 mph. */
+export const WORK_TRAIN_SPEED_MPS = 11.25 * 0.44704
 /** A work train is due out this long after it enters; past that it counts as late. */
 export const WORK_TRAIN_ALLOWANCE_S = 65 * 60
 /** Only one work train on the board at a time; a due one waits until it has gone. */
@@ -286,7 +286,7 @@ export function nextWorkTrainAt(seed: number, sent: number, fromS: number): numb
 
 /**
  * This game's work trains (levels with `workTrains`), dealt at the start from the seed alone so they
- * are the same for every player of a code: one every 10 to 20 minutes (`WORK_TRAIN_EVERY_MIN`) for as
+ * are the same for every player of a code: one every 60 minutes (`WORK_TRAIN_EVERY_MIN`) for as
  * long as scheduled trains are still to enter, each at a random terminal, bound for another it can
  * reach from there.
  */

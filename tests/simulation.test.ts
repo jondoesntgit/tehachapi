@@ -171,8 +171,14 @@ describe('simulation', () => {
 })
 
 describe('work trains', () => {
-  // The fixture with work trains on and nothing on the board until T1 at 10:32.
-  const quiet = buildGraph({ ...level, workTrains: true, startingTrains: [] })
+  // The fixture with work trains on, nothing on the board until T1 at 10:32, and one more train at
+  // noon so work trains keep coming past the first hour.
+  const quiet = buildGraph({
+    ...level,
+    workTrains: true,
+    startingTrains: [],
+    schedule: [...level.schedule, { ...level.schedule[0], id: 'T9', appearsAt: '12:00', dueAt: '12:20' }],
+  })
   // The same with no traffic until noon, so nothing gets in a work train's way.
   const roomy = buildGraph({ ...quiet.level, schedule: [{ ...level.schedule[0], appearsAt: '12:00', dueAt: '12:20' }] })
   const workTrains = (s: GameState) => s.trains.filter((t) => t.work)
@@ -181,14 +187,14 @@ describe('work trains', () => {
   const firstWorkTrain = (g: TrackGraph, seed = 1) => runUntil(g, createInitialState(g, seed), (s) => workTrains(s).length > 0)
   const exitOf = (terminal: string) => (terminal === 'EAST' ? { edgeId: 'M5', offsetM: 1000 } : { edgeId: 'M1', offsetM: 0 })
 
-  it('sends the first work train, W1 at 7.5 mph, 10 to 20 minutes into the game', () => {
+  it('sends the first work train, W1 at 11.25 mph, an hour into the game', () => {
     for (let seed = 0; seed < 20; seed++) {
-      const state = firstWorkTrain(quiet, seed)
+      const state = firstWorkTrain(roomy, seed)
       const w = workTrains(state)[0]
       expect(w).toMatchObject({ id: 'W1', name: 'Work train' })
-      expect(w.maxSpeedMps).toBeCloseTo(3.3528)
-      expect(state.timeS - startS).toBeGreaterThanOrEqual(10 * 60)
-      expect(state.timeS - startS).toBeLessThanOrEqual(20 * 60 + 1)
+      expect(w.maxSpeedMps).toBeCloseTo(5.0292)
+      expect(state.timeS - startS).toBeGreaterThanOrEqual(60 * 60)
+      expect(state.timeS - startS).toBeLessThanOrEqual(60 * 60 + 1)
     }
   })
 
@@ -249,11 +255,11 @@ describe('work trains', () => {
   })
 
   it('is cleared away by skipping to the next train', () => {
-    const state = firstWorkTrain(quiet)
+    const state = firstWorkTrain(roomy)
     const skipped = skipToNextArrival(state)
     expect(skipped.trains).toEqual([])
     expect(skipped.reservations).toEqual({})
-    expect(skipped.timeS).toBe(parseClock('10:32') - 10)
+    expect(skipped.timeS).toBe(parseClock('12:00') - 10)
   })
 })
 

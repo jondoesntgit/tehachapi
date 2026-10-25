@@ -121,20 +121,19 @@ describe('level 1', () => {
     expect(again).toMatchObject({ ok: false, reason: 'wrong-destination' })
     expect(again.ok || again.state!.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(dueAtS - 6 * 60)
   })
-  it('deals work trains every 10 to 20 minutes, each bound for a terminal it can reach', () => {
+  it('deals a work train every 60 minutes, each bound for a terminal it can reach', () => {
     const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
     const seen = new Set<string>()
     for (let seed = 0; seed < 30; seed++) {
       const state = createInitialState(graph, seed)
       const lastS = Math.max(...Object.values(state.timetable).map((e) => e.appearsAtS))
-      expect(state.workTimetable.length).toBeGreaterThan(3)
+      expect(state.workTimetable.length).toBeGreaterThanOrEqual(1)
       let prevS = parseClock(level.startTime)
       for (const plan of state.workTimetable) {
         expect(terminals).toContain(plan.entry)
         expect(plan.destination).not.toBe(plan.entry)
         expect(canReach(graph, entryStep(graph, plan.entry), plan.destination)).toBe(true)
-        expect((plan.appearsAtS - prevS) / 60).toBeGreaterThanOrEqual(10)
-        expect((plan.appearsAtS - prevS) / 60).toBeLessThanOrEqual(20)
+        expect(plan.appearsAtS - prevS).toBe(60 * 60)
         expect(plan.appearsAtS).toBeLessThan(lastS)
         prevS = plan.appearsAtS
         seen.add(plan.destination)

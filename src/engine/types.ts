@@ -95,7 +95,7 @@ export interface Level {
   startingTrains?: StartingTrain[]
   /** Extra text on the map, e.g. naming a branch. */
   labels?: MapLabel[]
-  /** Send a work train every 10 to 20 minutes while scheduled trains are still to come (see `spawnWorkTrain`). */
+  /** Send a work train every 60 minutes while scheduled trains are still to come (see `spawnWorkTrain`). */
   workTrains?: boolean
   /** Bring scheduled trains in early so at least this many are in play (see `keepTrainsInPlay`). */
   minTrainsOnBoard?: number
