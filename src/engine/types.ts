@@ -97,7 +97,7 @@ export interface Level {
   labels?: MapLabel[]
   /** Send a work train every 10 to 20 minutes while scheduled trains are still to come (see `spawnWorkTrain`). */
   workTrains?: boolean
-  /** Bring scheduled trains in early so at least this many are in play (see `bringTrainsForward`). */
+  /** Bring scheduled trains in early so at least this many are in play (see `keepTrainsInPlay`). */
   minTrainsOnBoard?: number
   /** Raise `minTrainsOnBoard` by one every this many minutes (see `requiredTrains`). */
   minTrainsRampEveryMin?: number
@@ -158,7 +158,7 @@ export interface TrainResult {
   reachedDestination: boolean
 }
 
-/** The next work train, announced at its terminal `ANNOUNCE_LEAD_S` before it enters. */
+/** A work train in this game's work-train timetable, dealt at the start like the scheduled trains. */
 export interface WorkTrainPlan {
   /** Terminal it enters at. */
   entry: string
@@ -187,10 +187,11 @@ export interface GameState {
   seed: number
   /** Work trains sent so far. */
   workTrainsSent: number
-  /** Game time the next work train goes out (levels with `workTrains`). */
-  nextWorkTrainS: number
-  /** The announced work train still to enter, or null if none is announced. */
-  workTrainPlan: WorkTrainPlan | null
+  /**
+   * Every work train of this game (levels with `workTrains`), in order, fixed at the start so it is
+   * the same whatever the player does. `workTrainsSent` indexes the next one to enter.
+   */
+  workTimetable: WorkTrainPlan[]
   /** Every train was launched and the ones on the board blocked each other for good; the game is over. */
   deadlocked: boolean
   /** Game time since which every train on the board has stood still, or null if one is moving or none are on it. */

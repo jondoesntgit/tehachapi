@@ -3,7 +3,8 @@ import { advance } from './physics'
 import { isDeadlocked } from './routing'
 import {
   buildTimetable,
-  nextWorkTrainAt,
+  buildWorkTimetable,
+  keepTrainsInPlay,
   nextArrivalS,
   placeStartingTrains,
   scoreArrival,
@@ -17,19 +18,21 @@ import type { GameState, Train } from './types'
 export const FIXED_DT_S = 0.1
 
 /**
- * A fresh game. `seed` randomizes when scheduled trains enter (`buildTimetable`) and where starting
- * trains stand (`placeStartingTrains`).
+ * A fresh game. `seed` randomizes when scheduled trains enter (`buildTimetable`, then
+ * `keepTrainsInPlay`), the work trains (`buildWorkTimetable`) and where starting trains stand
+ * (`placeStartingTrains`). Nothing later changes when a train is due to enter.
  */
 export function createInitialState(graph: TrackGraph, seed?: number): GameState {
+  // Every entry time is fixed here, from the seed alone, so it never depends on how the game is played.
+  const timetable = keepTrainsInPlay(graph, buildTimetable(graph, seed))
   return {
     timeS: parseClock(graph.level.startTime),
     ...placeStartingTrains(graph, seed),
     pending: graph.level.schedule.map((entry) => entry.id),
-    timetable: buildTimetable(graph, seed),
+    timetable,
     seed: seed ?? 0,
     workTrainsSent: 0,
-    nextWorkTrainS: nextWorkTrainAt(seed ?? 0, 0, parseClock(graph.level.startTime)),
-    workTrainPlan: null,
+    workTimetable: buildWorkTimetable(graph, seed ?? 0, timetable),
     deadlocked: false,
     idleSinceS: null,
     stalled: false,

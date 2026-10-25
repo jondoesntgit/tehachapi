@@ -1,9 +1,9 @@
 import { parseClock } from './clock'
 import { safeSpeed } from './physics'
 import { canReach, STOP_CLEARANCE_M } from './routing'
-import { getEdge, type TrackGraph } from './trackGraph'
+import { getEdge, nextSteps, stepEndNode, type TrackGraph } from './trackGraph'
 import { seededRandom } from './random'
-import type { Direction, GameState, RouteStep, ScheduleEntry, TimetableEntry, Train, TrainResult } from './types'
+import type { Direction, GameState, RouteStep, ScheduleEntry, TimetableEntry, Train, TrainResult, WorkTrainPlan } from './types'
 
 /** Every train is announced at its entry terminal this long before it enters, with a countdown. */
 export const ANNOUNCE_LEAD_S = 10 * 60
@@ -20,8 +20,8 @@ export interface Announcement {
 }
 
 /**
- * Trains announced at their terminals: scheduled trains entering within `ANNOUNCE_LEAD_S` (or due
- * and held because their entry block is taken), and the planned work train. Soonest first.
+ * Trains announced at their terminals: scheduled and work trains entering within `ANNOUNCE_LEAD_S`
+ * (or due and held at their portal). Soonest first.
  */
 export function announcedTrains(graph: TrackGraph, state: GameState): Announcement[] {
   const announced: Announcement[] = state.pending
@@ -30,14 +30,18 @@ export function announcedTrains(graph: TrackGraph, state: GameState): Announceme
       const entry = getScheduleEntry(graph, id)
       return { id, entry: entry.entry, destination: entry.destination, appearsAtS: state.timetable[id].appearsAtS, work: false }
     })
-  const plan = state.workTrainPlan
-  if (plan) announced.push({ id: `W${state.workTrainsSent + 1}`, ...plan, work: true })
+  state.workTimetable.forEach((plan, i) => {
+    if (i >= state.workTrainsSent && plan.appearsAtS <= state.timeS + ANNOUNCE_LEAD_S) {
+      announced.push({ id: `W${i + 1}`, ...plan, work: true })
+    }
+  })
   return announced.sort((a, b) => a.appearsAtS - b.appearsAtS)
 }
 
-/** The planned work train, if its time has come but its entry block is still occupied. */
+/** The next work train, if its time has come but it is waiting at its portal. */
 export function workTrainHeld(state: GameState): boolean {
-  return state.workTrainPlan !== null && state.workTrainPlan.appearsAtS <= state.timeS
+  const next = state.workTimetable[state.workTrainsSent]
+  return next !== undefined && next.appearsAtS <= state.timeS
 }
 
 export function getScheduleEntry(graph: TrackGraph, id: string): ScheduleEntry {
@@ -97,11 +101,6 @@ export function nextArrivalS(state: GameState): number | null {
 }
 
 /**
- * Brings due trains in through their portals, head first, body still off the map. A new train is
- * routed to the far end of its entry block and stops there until the dispatcher sends it on.
- * A train whose entry block is reserved stays pending.
- */
-/**
  * How many scheduled trains must be in play at `timeS`: `minTrainsOnBoard`, plus one more for every
  * `minTrainsRampEveryMin` minutes since the level started.
  */
@@ -112,33 +111,79 @@ export function requiredTrains(graph: TrackGraph, timeS: number): number {
   return minTrainsOnBoard + Math.floor(elapsedS / (minTrainsRampEveryMin * 60))
 }
 
-/**
- * Keeps at least `requiredTrains` scheduled trains in play (on the board, or announced: entering
- * within `ANNOUNCE_LEAD_S` or held at their portal). While there are fewer, the earliest pending
- * trains are brought forward to enter `ANNOUNCE_LEAD_S` from now, so each still gets its full
- * countdown; due times move with them, so each keeps its time allowance.
- */
-export function bringTrainsForward(graph: TrackGraph, state: GameState): GameState {
-  const min = requiredTrains(graph, state.timeS)
-  const announceByS = state.timeS + ANNOUNCE_LEAD_S
-  const announced = state.pending.filter((id) => state.timetable[id].appearsAtS <= announceByS).length
-  const inPlay = state.trains.filter((t) => !t.work).length + announced
-  if (inPlay >= min) return state
-  let timetable = state.timetable
-  const waiting = state.pending
-    .filter((id) => timetable[id].appearsAtS > announceByS)
-    .sort((a, b) => timetable[a].appearsAtS - timetable[b].appearsAtS)
-    .slice(0, min - inPlay)
-  for (const id of waiting) {
-    const { appearsAtS, dueAtS } = timetable[id]
-    timetable = { ...timetable, [id]: { appearsAtS: announceByS, dueAtS: dueAtS - (appearsAtS - announceByS) } }
+/** Length of the shortest way in through `entry` and out through `destination`, or null if none. */
+export function shortestCrossingM(graph: TrackGraph, entry: string, destination: string): number | null {
+  // Dijkstra over (edge, direction); a step's distance is measured to its far end.
+  const first = entryStep(graph, entry)
+  const best = new Map<string, number>()
+  const queue: { step: RouteStep; distM: number }[] = [{ step: first, distM: getEdge(graph, first.edgeId).lengthM }]
+  while (queue.length > 0) {
+    queue.sort((a, b) => a.distM - b.distM)
+    const { step, distM } = queue.shift()!
+    const key = `${step.edgeId}:${step.direction}`
+    if (best.has(key)) continue
+    best.set(key, distM)
+    if (stepEndNode(getEdge(graph, step.edgeId), step.direction) === destination) return distM
+    for (const next of nextSteps(graph, step)) queue.push({ step: next, distM: distM + getEdge(graph, next.edgeId).lengthM })
   }
-  return waiting.length === 0 ? state : { ...state, timetable }
+  return null
 }
 
-export function spawnDue(graph: TrackGraph, rawState: GameState): GameState {
+/**
+ * The quickest a train could cross the board: from entering until its tail clears its destination,
+ * running its shortest way at top speed, plus the time to get up to speed once (it stops at the end
+ * of its entry block first).
+ */
+export function quickestCrossingS(graph: TrackGraph, entry: ScheduleEntry): number {
+  const { trainLengthM, physics } = graph.level
+  const crossingM = shortestCrossingM(graph, entry.entry, entry.destination) ?? 0
+  return (crossingM + trainLengthM) / entry.maxSpeedMps + entry.maxSpeedMps / physics.accelMps2
+}
+
+/**
+ * Brings scheduled trains forward so that, at every minute of the game, at least `requiredTrains`
+ * are in play. A train counts from its announcement (`ANNOUNCE_LEAD_S` before it enters) until the
+ * quickest it could have crossed the board (`quickestCrossingS`), as if dispatched perfectly; a
+ * starting train counts until it is due out. This runs once, on the timetable, when the game is
+ * dealt, so it depends only on the game's code and never on how quickly the player actually clears
+ * trains: every player of a code sees the same trains at the same times. A train brought forward enters `ANNOUNCE_LEAD_S` after the
+ * minute it is needed, so it still gets its full countdown; its due time moves with it, so it keeps
+ * its time allowance.
+ */
+export function keepTrainsInPlay(
+  graph: TrackGraph,
+  timetable: Record<string, TimetableEntry>,
+): Record<string, TimetableEntry> {
+  if (!graph.level.minTrainsOnBoard) return timetable
+  const next = { ...timetable }
+  const ids = Object.keys(next)
+  const crossingS = Object.fromEntries(ids.map((id) => [id, quickestCrossingS(graph, getScheduleEntry(graph, id))]))
+  const lastS = Math.max(...ids.map((id) => next[id].appearsAtS))
+  const startingDueS = (graph.level.startingTrains ?? []).map((start) => parseClock(start.dueAt))
+  for (let t = parseClock(graph.level.startTime); t <= lastS; t += 60) {
+    const announceByS = t + ANNOUNCE_LEAD_S
+    const inPlay =
+      startingDueS.filter((dueS) => dueS > t).length +
+      ids.filter((id) => next[id].appearsAtS <= announceByS && next[id].appearsAtS + crossingS[id] > t).length
+    const later = ids
+      .filter((id) => next[id].appearsAtS > announceByS)
+      .sort((a, b) => next[a].appearsAtS - next[b].appearsAtS || ids.indexOf(a) - ids.indexOf(b))
+      .slice(0, Math.max(0, requiredTrains(graph, t) - inPlay))
+    for (const id of later) {
+      const { appearsAtS, dueAtS } = next[id]
+      next[id] = { appearsAtS: announceByS, dueAtS: dueAtS - (appearsAtS - announceByS) }
+    }
+  }
+  return next
+}
+
+/**
+ * Brings due trains in through their portals, head first, body still off the map. A new train is
+ * routed to the far end of its entry block and stops there until the dispatcher sends it on.
+ * A train whose entry block is reserved stays pending.
+ */
+export function spawnDue(graph: TrackGraph, state: GameState): GameState {
   const { decelMps2, stopMarginM } = graph.level.physics
-  const state = bringTrainsForward(graph, rawState)
   let next = state
   for (const entry of heldAtPortal(graph, state)) {
     const step = entryStep(graph, entry.entry)
@@ -240,37 +285,44 @@ export function nextWorkTrainAt(seed: number, sent: number, fromS: number): numb
 }
 
 /**
- * Announces the next work train at its terminal: `ANNOUNCE_LEAD_S` before `state.nextWorkTrainS`,
- * while scheduled trains are still to come and no other work train is on the board or announced. It
- * gets a random terminal and a destination it can reach from there, and is due to enter at
- * `nextWorkTrainS`, or a full `ANNOUNCE_LEAD_S` after the announcement if that is later.
+ * This game's work trains (levels with `workTrains`), dealt at the start from the seed alone so they
+ * are the same for every player of a code: one every 10 to 20 minutes (`WORK_TRAIN_EVERY_MIN`) for as
+ * long as scheduled trains are still to enter, each at a random terminal, bound for another it can
+ * reach from there.
  */
-export function planWorkTrain(graph: TrackGraph, state: GameState): GameState {
-  if (!graph.level.workTrains || state.workTrainPlan || state.pending.length === 0) return state
-  if (state.timeS < state.nextWorkTrainS - ANNOUNCE_LEAD_S) return state
-  if (state.trains.filter((t) => t.work).length >= MAX_WORK_TRAINS) return state
-
-  const random = seededRandom((state.seed ^ 0x3017) + state.workTrainsSent * 7919)
+export function buildWorkTimetable(
+  graph: TrackGraph,
+  seed: number,
+  timetable: Record<string, TimetableEntry>,
+): WorkTrainPlan[] {
+  if (!graph.level.workTrains) return []
   const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
   const exitsFrom = (entry: string) => terminals.filter((id) => id !== entry && canReach(graph, entryStep(graph, entry), id))
   const entries = terminals.filter((id) => exitsFrom(id).length > 0)
-  if (entries.length === 0) return state
-  const entry = entries[Math.floor(random() * entries.length)]
-  const exits = exitsFrom(entry)
-  const appearsAtS = Math.max(state.nextWorkTrainS, state.timeS + ANNOUNCE_LEAD_S)
-  return { ...state, workTrainPlan: { entry, destination: exits[Math.floor(random() * exits.length)], appearsAtS } }
+  if (entries.length === 0) return []
+  const lastS = Math.max(...Object.values(timetable).map((e) => e.appearsAtS))
+  const plans: WorkTrainPlan[] = []
+  for (let atS = nextWorkTrainAt(seed, 0, parseClock(graph.level.startTime)); atS < lastS; ) {
+    const random = seededRandom((seed ^ 0x3017) + plans.length * 7919)
+    const entry = entries[Math.floor(random() * entries.length)]
+    const exits = exitsFrom(entry)
+    plans.push({ entry, destination: exits[Math.floor(random() * exits.length)], appearsAtS: atS })
+    atS = nextWorkTrainAt(seed, plans.length, atS)
+  }
+  return plans
 }
 
 /**
- * Sends the announced work train in once its time has come and its entry block is free, at
- * `WORK_TRAIN_SPEED_MPS`. Like a scheduled train it pulls up at the far end of its entry block and
- * waits for the dispatcher. It is due out `WORK_TRAIN_ALLOWANCE_S` after entering and is scored like
- * any train. The next one goes out 10 to 20 minutes later (`nextWorkTrainAt`).
+ * Sends the next work train in once its time has come, its entry block is free and no other work
+ * train is on the board (`MAX_WORK_TRAINS`); until then it waits at its portal. It enters at
+ * `WORK_TRAIN_SPEED_MPS`, pulls up at the far end of its entry block like a scheduled train and
+ * waits for the dispatcher. It is due out `WORK_TRAIN_ALLOWANCE_S` after its timetabled entry, so
+ * waiting at the portal counts against the player, as it does for scheduled trains.
  */
-export function spawnWorkTrain(graph: TrackGraph, rawState: GameState): GameState {
-  const state = planWorkTrain(graph, rawState)
-  const plan = state.workTrainPlan
+export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
+  const plan = state.workTimetable[state.workTrainsSent]
   if (!plan || state.timeS < plan.appearsAtS) return state
+  if (state.trains.filter((t) => t.work).length >= MAX_WORK_TRAINS) return state
   const first = entryStep(graph, plan.entry)
   if (state.reservations[first.edgeId] !== undefined) return state
 
@@ -283,7 +335,7 @@ export function spawnWorkTrain(graph: TrackGraph, rawState: GameState): GameStat
     name: 'Work train',
     maxSpeedMps: WORK_TRAIN_SPEED_MPS,
     destination: plan.destination,
-    dueAtS: state.timeS + WORK_TRAIN_ALLOWANCE_S,
+    dueAtS: plan.appearsAtS + WORK_TRAIN_ALLOWANCE_S,
     speedMps: Math.min(WORK_TRAIN_SPEED_MPS, safeSpeed(stopAtM, decelMps2, stopMarginM)),
     path: [first],
     headM: 0,
@@ -297,8 +349,6 @@ export function spawnWorkTrain(graph: TrackGraph, rawState: GameState): GameStat
     trains: [...state.trains, train],
     reservations: { ...state.reservations, [first.edgeId]: id },
     workTrainsSent: sent,
-    nextWorkTrainS: nextWorkTrainAt(state.seed, sent, state.timeS),
-    workTrainPlan: null,
   }
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
 import { canReach, findSteps, hasRoom, requestRoute } from '../src/engine/routing'
-import { ANNOUNCE_LEAD_S, buildTimetable, entryStep, isLevelComplete, requiredTrains } from '../src/engine/scheduler'
+import { ANNOUNCE_LEAD_S, buildTimetable, entryStep, isLevelComplete, quickestCrossingS, requiredTrains } from '../src/engine/scheduler'
 import { createInitialState, FIXED_DT_S, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, nextSteps } from '../src/engine/trackGraph'
 import type { GameState, TrackPosition } from '../src/engine/types'
@@ -121,17 +121,24 @@ describe('level 1', () => {
     expect(again).toMatchObject({ ok: false, reason: 'wrong-destination' })
     expect(again.ok || again.state!.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(dueAtS - 6 * 60)
   })
-  it('announces each work train at a terminal, bound for another terminal it can reach', () => {
+  it('deals work trains every 10 to 20 minutes, each bound for a terminal it can reach', () => {
     const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
     const seen = new Set<string>()
     for (let seed = 0; seed < 30; seed++) {
-      const state = runUntil(graph, createInitialState(graph, seed), (s) => s.workTrainPlan !== null)
-      const plan = state.workTrainPlan!
-      expect(terminals).toContain(plan.entry)
-      expect(plan.destination).not.toBe(plan.entry)
-      expect(canReach(graph, entryStep(graph, plan.entry), plan.destination)).toBe(true)
-      expect(plan.appearsAtS - state.timeS).toBeGreaterThan(ANNOUNCE_LEAD_S - 1)
-      seen.add(plan.destination)
+      const state = createInitialState(graph, seed)
+      const lastS = Math.max(...Object.values(state.timetable).map((e) => e.appearsAtS))
+      expect(state.workTimetable.length).toBeGreaterThan(3)
+      let prevS = parseClock(level.startTime)
+      for (const plan of state.workTimetable) {
+        expect(terminals).toContain(plan.entry)
+        expect(plan.destination).not.toBe(plan.entry)
+        expect(canReach(graph, entryStep(graph, plan.entry), plan.destination)).toBe(true)
+        expect((plan.appearsAtS - prevS) / 60).toBeGreaterThanOrEqual(10)
+        expect((plan.appearsAtS - prevS) / 60).toBeLessThanOrEqual(20)
+        expect(plan.appearsAtS).toBeLessThan(lastS)
+        prevS = plan.appearsAtS
+        seen.add(plan.destination)
+      }
     }
     expect(seen.size).toBeGreaterThan(2)
   })
@@ -150,62 +157,79 @@ describe('level 1', () => {
     }
   })
 
-  it('brings trains in early so the rising minimum of scheduled trains is always in play', () => {
-    // Trains are left standing here, which would otherwise end the game after 20 idle minutes.
-    const graph = buildGraph({ ...level, idleLimitMin: undefined })
+  it('deals a timetable that keeps the rising minimum of trains in play at every minute', () => {
+    const startingDueS = (level.startingTrains ?? []).map((t) => parseClock(t.dueAt))
     for (let seed = 0; seed < 20; seed++) {
-      let state = createInitialState(graph, seed)
-      const inPlay = (s: GameState) =>
-        s.trains.filter((t) => !t.work).length +
-        s.pending.filter((id) => s.timetable[id].appearsAtS <= s.timeS + ANNOUNCE_LEAD_S).length
-      // Sample the first hour, sending every train that can leave straight out, as a player might.
-      for (let i = 0; i < 60; i++) {
-        state = runUntil(graph, state, (s) => s.timeS >= state.timeS + 60)
-        // While enough trains remain to be brought in, the board holds at least the rising minimum.
-        const need = requiredTrains(graph, state.timeS)
-        if (state.pending.length >= need) expect(inPlay(state)).toBeGreaterThanOrEqual(need)
-        for (const t of state.trains.filter((t) => !t.work && t.speedMps === 0)) {
-          const exit = exitFor(t.destination)
-          const r = requestRoute(graph, state, t.id, exit)
-          if (r.ok) state = r.state
-        }
+      const { timetable } = createInitialState(graph, seed)
+      const entries = Object.values(timetable)
+      const lastS = Math.max(...entries.map((e) => e.appearsAtS))
+      for (let t = parseClock(level.startTime); t <= lastS; t += 60) {
+        // A train is in play from its announcement until the quickest it could have crossed the board.
+        const inPlay =
+          startingDueS.filter((d) => d > t).length +
+          level.schedule.filter((e) => {
+            const { appearsAtS } = timetable[e.id]
+            return appearsAtS <= t + ANNOUNCE_LEAD_S && appearsAtS + quickestCrossingS(graph, e) > t
+          }).length
+        const toCome = entries.filter((e) => e.appearsAtS > t + ANNOUNCE_LEAD_S).length
+        // Short only when every remaining train has been brought in already.
+        if (toCome > 0) expect(inPlay).toBeGreaterThanOrEqual(requiredTrains(graph, t))
       }
     }
+  })
+
+  it('brings trains forward with a full 10-minute countdown, keeping their time allowance', () => {
+    let moved = 0
+    for (let seed = 0; seed < 20; seed++) {
+      const written = buildTimetable(graph, seed)
+      const { timetable } = createInitialState(graph, seed)
+      for (const id of Object.keys(written)) {
+        if (timetable[id].appearsAtS === written[id].appearsAtS) continue
+        moved++
+        expect(timetable[id].appearsAtS).toBeLessThan(written[id].appearsAtS)
+        // Announced at the start at the earliest, so never short of its countdown.
+        expect(timetable[id].appearsAtS).toBeGreaterThanOrEqual(parseClock(level.startTime) + ANNOUNCE_LEAD_S)
+        expect(timetable[id].dueAtS - timetable[id].appearsAtS).toBe(written[id].dueAtS - written[id].appearsAtS)
+      }
+    }
+    expect(moved).toBeGreaterThan(0)
+  })
+
+  it('deals the same entry times for every player of a code, however they dispatch', () => {
+    // Nobody dispatches in one game, which would otherwise end it after 20 idle minutes.
+    const patient = buildGraph({ ...level, idleLimitMin: undefined })
+    /** Plays two hours; `eager` sends every standing train straight out once a game minute. */
+    const play = (eager: boolean) => {
+      const start = createInitialState(patient, 7)
+      let state = start
+      for (let i = 0; i < 7200 / FIXED_DT_S; i++) {
+        state = step(patient, state, FIXED_DT_S)
+        // The timetables never change, whatever happens on the board.
+        if (i % 600 === 0) {
+          expect(state.timetable).toEqual(start.timetable)
+          expect(state.workTimetable).toEqual(start.workTimetable)
+        }
+        if (eager && i % 600 === 0) {
+          for (const t of state.trains.filter((t) => t.speedMps === 0)) {
+            const r = requestRoute(patient, state, t.id, exitFor(t.destination))
+            if (r.ok) state = r.state
+          }
+        }
+      }
+      return { start, state }
+    }
+    const eager = play(true)
+    const idle = play(false)
+    expect(eager.start).toEqual(idle.start)
+    // The eager player cleared trains the idle one left standing; the timetables are still identical.
+    expect(eager.state.results.length).toBeGreaterThan(idle.state.results.length)
+    expect(eager.state.timetable).toEqual(idle.state.timetable)
+    expect(eager.state.workTimetable).toEqual(idle.state.workTimetable)
   })
 
   it('needs four trains in play for the first 15 minutes, then one more every 15 minutes', () => {
     const startS = parseClock(level.startTime)
     expect([0, 14, 15, 29, 30, 45, 60].map((m) => requiredTrains(graph, startS + m * 60))).toEqual([4, 4, 5, 5, 6, 7, 8])
-  })
-
-  it('brings trains forward with a full 10-minute countdown, keeping their time allowance', () => {
-    // Trains are left standing here, which would otherwise end the game after 20 idle minutes.
-    const patient = buildGraph({ ...level, idleLimitMin: undefined })
-    const written = buildTimetable(patient, 3)
-    let state = createInitialState(patient, 3)
-    let moved = 0
-    for (let i = 0; i < 3600 / FIXED_DT_S; i++) {
-      const next = step(patient, state, FIXED_DT_S)
-      for (const id of next.pending) {
-        const before = state.timetable[id]
-        const after = next.timetable[id]
-        if (after.appearsAtS === before.appearsAtS) continue
-        moved++
-        // Moved earlier, but never so early that it skips its countdown.
-        expect(after.appearsAtS).toBeLessThan(before.appearsAtS)
-        expect(after.appearsAtS).toBe(next.timeS + ANNOUNCE_LEAD_S)
-        expect(after.dueAtS - after.appearsAtS).toBe(written[id].dueAtS - written[id].appearsAtS)
-      }
-      state = next
-      // Once a game minute, send every standing train that can leave straight out, as a player might.
-      if (i % 600 === 0) {
-        for (const t of state.trains.filter((t) => t.speedMps === 0)) {
-          const r = requestRoute(patient, state, t.id, exitFor(t.destination))
-          if (r.ok) state = r.state
-        }
-      }
-    }
-    expect(moved).toBeGreaterThan(0)
   })
 
   it('makes at least three pairs of trains pass each other in every game', () => {

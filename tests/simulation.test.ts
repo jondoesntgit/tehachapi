@@ -206,7 +206,8 @@ describe('work trains', () => {
   it('is due out 65 minutes after it enters, and is scored like any train', () => {
     let state = firstWorkTrain(roomy)
     const w = workTrains(state)[0]
-    expect(w.dueAtS - state.timeS).toBe(65 * 60)
+    // Due 65 minutes after its timetabled entry.
+    expect(w.dueAtS).toBe(state.workTimetable[0].appearsAtS + 65 * 60)
     state = route(roomy, state, w.id, exitOf(w.destination))
     state = runUntil(roomy, state, (s) => !s.trains.some((t) => t.id === w.id))
     expect(state.results).toEqual([expect.objectContaining({ trainId: w.id, exitedAt: w.destination, lateMinutes: 0 })])
@@ -284,34 +285,36 @@ describe('work train announcements', () => {
     startingTrains: [],
     schedule: [{ ...level.schedule[0], appearsAt: '12:00', dueAt: '12:20' }],
   })
-  const planned = (seed = 1) => runUntil(roomy, createInitialState(roomy, seed), (s) => s.workTrainPlan !== null)
+  const due = (seed = 1) => {
+    const state = createInitialState(roomy, seed)
+    const plan = state.workTimetable[0]
+    return { plan, state: runUntil(roomy, state, (s) => s.timeS >= plan.appearsAtS - ANNOUNCE_LEAD_S) }
+  }
 
-  it('announces the work train with a full countdown, then sends it in where and when announced', () => {
+  it('announces each work train 10 minutes ahead, then sends it in where and when announced', () => {
     for (let seed = 0; seed < 10; seed++) {
-      const state = planned(seed)
-      const plan = state.workTrainPlan!
-      expect(plan.appearsAtS - state.timeS).toBeGreaterThanOrEqual(ANNOUNCE_LEAD_S - 1)
+      const { plan, state } = due(seed)
       expect(announcedTrains(roomy, state)).toContainEqual({ id: 'W1', ...plan, work: true })
       const entered = runUntil(roomy, state, (s) => s.trains.some((t) => t.work))
       const w = entered.trains.find((t) => t.work)!
       expect(entered.timeS).toBeCloseTo(plan.appearsAtS, 0)
       expect(w.path[0]).toEqual(entryStep(roomy, plan.entry))
       expect(w.destination).toBe(plan.destination)
-      expect(entered.workTrainPlan).toBeNull()
+      expect(announcedTrains(roomy, entered).some((a) => a.id === 'W1')).toBe(false)
     }
   })
 
-  it('holds an announced work train at its portal while its entry block is taken', () => {
-    let state = planned()
-    const plan = state.workTrainPlan!
+  it('holds a work train at its portal while its entry block is taken; its due time stays put', () => {
+    const { plan, state: announced } = due()
     const entryEdge = entryStep(roomy, plan.entry).edgeId
-    state = { ...state, reservations: { ...state.reservations, [entryEdge]: 'X' } }
+    let state = { ...announced, reservations: { ...announced.reservations, [entryEdge]: 'X' } }
     state = runUntil(roomy, state, (s) => s.timeS >= plan.appearsAtS + 60)
     expect(state.trains.some((t) => t.work)).toBe(false)
     expect(workTrainHeld(state)).toBe(true)
     const free = Object.fromEntries(Object.entries(state.reservations).filter(([edgeId]) => edgeId !== entryEdge))
     const entered = step(roomy, { ...state, reservations: free }, 0.1)
-    expect(entered.trains.some((t) => t.work)).toBe(true)
+    const w = entered.trains.find((t) => t.work)!
+    expect(w.dueAtS).toBe(plan.appearsAtS + 65 * 60)
     expect(workTrainHeld(entered)).toBe(false)
   })
 })
