@@ -218,5 +218,6 @@ describe('following in full games', () => {
     }
     // Following really happened in these games.
     expect(followed).toBeGreaterThan(0)
-  })
+    // Five whole games: a few seconds here, longer on CI's slower runners.
+  }, 60_000)
 })
