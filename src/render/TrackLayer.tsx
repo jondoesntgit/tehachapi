@@ -1,8 +1,7 @@
-import { getEdge, pathLength, pathPolyline, type TrackGraph } from '../engine/trackGraph'
+import { pathLength, pathPolyline } from '../engine/trackGraph'
 import type { CSSProperties } from 'react'
-import type { LevelNode, Vec2 } from '../engine/types'
 import { useGameStore } from '../store'
-import { LABEL_SIZE, pointsAttr, PX_PER_MM, toView, trainColor, trimEnd, viewPointsAttr } from './view'
+import { LABEL_SIZE, outward, pointsAttr, PX_PER_MM, toView, trainColor, trimEnd, viewPointsAttr } from './view'
 
 /** Clear screen space between the ends of two trains' routes, so they never touch. */
 const ROUTE_GAP_MM = 1
@@ -11,17 +10,6 @@ const RESERVED_STROKE_PX = 4
 
 /** Half-length of a terminal's end-of-line bar, in view units. */
 const PORTAL_HALF = 90
-
-/** Unit vector, in view space, pointing along the track out through a terminal. */
-function outward(graph: TrackGraph, node: LevelNode): Vec2 {
-  const edgeId = graph.edgesAt.get(node.id)?.[0]
-  if (!edgeId) return { x: 1, y: 0 }
-  const { polyline, from } = getEdge(graph, edgeId)
-  const inner = toView(from === node.id ? polyline[1] : polyline[polyline.length - 2])
-  const end = toView(node)
-  const length = Math.hypot(end.x - inner.x, end.y - inner.y)
-  return { x: (end.x - inner.x) / length, y: (end.y - inner.y) / length }
-}
 
 export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
   const graph = useGameStore((s) => s.graph)

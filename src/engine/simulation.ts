@@ -29,6 +29,7 @@ export function createInitialState(graph: TrackGraph, seed?: number): GameState 
     seed: seed ?? 0,
     workTrainsSent: 0,
     nextWorkTrainS: nextWorkTrainAt(seed ?? 0, 0, parseClock(graph.level.startTime)),
+    workTrainPlan: null,
     deadlocked: false,
     idleSinceS: null,
     stalled: false,

@@ -119,6 +119,23 @@ body,
   pointer-events: none;
 }
 
+.arrival {
+  fill: var(--arrival-color, var(--text));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Due, but its entry track is taken. */
+.arrival-held {
+  animation: arrival-blink 1s steps(2, jump-none) infinite;
+}
+
+@keyframes arrival-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .train-label {
   fill: var(--text);
   font-weight: 600;

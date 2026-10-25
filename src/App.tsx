@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { useTapRouting } from './input/useTapRouting'
+import { ArrivalLayer } from './render/ArrivalLayer'
 import { Hud } from './render/Hud'
 import { TrackLayer } from './render/TrackLayer'
 import { TrainLayer } from './render/TrainLayer'
@@ -50,6 +51,7 @@ export function App() {
       <svg ref={svgRef} className="map" viewBox={viewBox(graph)} preserveAspectRatio="xMidYMid meet" onClick={onTap}>
         <TrackLayer unitsPerPx={unitsPerPx} />
         <TrainLayer />
+        <ArrivalLayer />
       </svg>
       <Hud />
     </main>

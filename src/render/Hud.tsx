@@ -4,6 +4,7 @@ import {
   DEADLOCK_PENALTY_MIN,
   heldAtPortal,
   isLevelComplete,
+  workTrainHeld,
   lateTotal,
   levelScore,
   nextArrivalS,
@@ -44,7 +45,7 @@ export function Hud() {
     return () => clearTimeout(timer)
   }, [message, clearMessage])
 
-  const held = heldAtPortal(graph, game)
+  const held = [...heldAtPortal(graph, game).map((e) => e.name), ...(workTrainHeld(game) ? ['Work train'] : [])]
   const canSkip = game.trains.every((t) => t.work) && nextArrivalS(game) !== null
   const complete = isLevelComplete(game)
 
@@ -84,7 +85,7 @@ export function Hud() {
 
       {(message || held.length > 0) && (
         <div className="hud toast" role="status">
-          {message ?? `${held.map((e) => e.name).join(', ')} waiting to enter — entry track occupied`}
+          {message ?? `${held.join(', ')} waiting to enter — entry track occupied`}
         </div>
       )}
 

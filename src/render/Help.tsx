@@ -1,6 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { useGameStore } from '../store'
-import { WORK_TRAIN_COLOR } from './view'
 
 /** A short stretch of map drawn with the same classes the map uses, so the legend can't drift. */
 function Swatch({ children }: { children: ReactNode }) {
@@ -40,10 +39,6 @@ export function Help({ onClose }: { onClose: () => void }) {
       ),
       text: `Train heading to ${node.label ?? node.id}`,
     }))
-  trainColors.push({
-    swatch: <polyline className="train" style={{ '--train-color': WORK_TRAIN_COLOR } as CSSProperties} points="6,10 42,10" />,
-    text: 'Work train (W)',
-  })
   const legend = [...LEGEND.slice(0, 2), ...trainColors, ...LEGEND.slice(2)]
   return (
     <div className="hud help-backdrop" onClick={onClose}>
@@ -81,7 +76,8 @@ export function Help({ onClose }: { onClose: () => void }) {
               Trains cannot reverse. A route takes a siding by itself when the main is held, and is refused if
               another train is in the way or the train cannot stop in time. Sending a train where it could
               only leave by the wrong terminal is refused, and moves its due time 3 minutes earlier.
-              Every 10 to 20 minutes a work train (W) arrives at 7.5 mph, one at a time; route it like any other train. It has 65 minutes to clear before it counts as late. More trains are kept in play as the game goes on: at least 4 at first, one more every 15 minutes. Your
+              Every train is announced at the terminal it will enter by, 10 minutes ahead, with a countdown.
+            Every 10 to 20 minutes a work train (W) arrives at 7.5 mph, one at a time, in its destination’s color; route it like any other train. It has 65 minutes to clear before it counts as late. More trains are kept in play as the game goes on: at least 4 at first, one more every 15 minutes. Your
               score at the end is 100, less every minute trains were late. If every train has entered and the ones on the board block each other with
               no way forward, the game ends and 90 minutes are added to the late total. The game also ends if no train moves for 20 minutes.
             </p>
@@ -106,7 +102,19 @@ export function Help({ onClose }: { onClose: () => void }) {
                 <b>T3 · 2m late</b>&nbsp;already 2 minutes past due
               </li>
               <li>
-                <b>W</b>&nbsp;a work train (not timed)
+                <b>W · 40m</b>&nbsp;a work train, due out in 40 minutes
+              </li>
+            </ul>
+            <h3>Beside a terminal</h3>
+            <ul className="legend">
+              <li>
+                <b>T7 4:32</b>&nbsp;T7 enters here in 4 minutes 32 seconds
+              </li>
+              <li>
+                <b>W 9:10</b>&nbsp;the next work train enters here
+              </li>
+              <li>
+                <b>T7 held</b>&nbsp;due now, but the track inside is occupied
               </li>
             </ul>
           </section>

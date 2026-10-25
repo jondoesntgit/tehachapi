@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
-import { heldAtPortal, isLevelComplete, lateTotal, levelScore } from '../src/engine/scheduler'
+import { announcedTrains, ANNOUNCE_LEAD_S, entryStep, heldAtPortal, isLevelComplete, lateTotal, levelScore, workTrainHeld } from '../src/engine/scheduler'
 import { isDeadlocked, requestRoute } from '../src/engine/routing'
 import { createInitialState, skipToNextArrival, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, type TrackGraph } from '../src/engine/trackGraph'
@@ -253,6 +253,66 @@ describe('work trains', () => {
     expect(skipped.trains).toEqual([])
     expect(skipped.reservations).toEqual({})
     expect(skipped.timeS).toBe(parseClock('10:32') - 10)
+  })
+})
+
+describe('announcements', () => {
+  it('announces a scheduled train at its entry terminal 10 minutes before it enters', () => {
+    const t1S = parseClock('10:32')
+    const before = runUntil(graph, createInitialState(graph), (s) => s.timeS >= t1S - ANNOUNCE_LEAD_S - 1)
+    expect(announcedTrains(graph, before).map((a) => a.id)).not.toContain('T1')
+    const announced = runUntil(graph, before, (s) => s.timeS >= t1S - ANNOUNCE_LEAD_S)
+    expect(announcedTrains(graph, announced)).toContainEqual({
+      id: 'T1', entry: 'WEST', destination: level.schedule[0].destination, appearsAtS: t1S, work: false,
+    })
+    // It stays announced until it is on the board.
+    const entered = runUntil(graph, announced, (s) => s.trains.some((t) => t.id === 'T1'))
+    expect(announcedTrains(graph, entered).map((a) => a.id)).not.toContain('T1')
+  })
+
+  it('lists the soonest first', () => {
+    const state = runUntil(graph, createInitialState(graph), (s) => s.timeS >= parseClock('10:35'))
+    const times = announcedTrains(graph, state).map((a) => a.appearsAtS)
+    expect(times).toEqual([...times].sort((a, b) => a - b))
+  })
+})
+
+describe('work train announcements', () => {
+  const roomy = buildGraph({
+    ...level,
+    workTrains: true,
+    startingTrains: [],
+    schedule: [{ ...level.schedule[0], appearsAt: '12:00', dueAt: '12:20' }],
+  })
+  const planned = (seed = 1) => runUntil(roomy, createInitialState(roomy, seed), (s) => s.workTrainPlan !== null)
+
+  it('announces the work train with a full countdown, then sends it in where and when announced', () => {
+    for (let seed = 0; seed < 10; seed++) {
+      const state = planned(seed)
+      const plan = state.workTrainPlan!
+      expect(plan.appearsAtS - state.timeS).toBeGreaterThanOrEqual(ANNOUNCE_LEAD_S - 1)
+      expect(announcedTrains(roomy, state)).toContainEqual({ id: 'W1', ...plan, work: true })
+      const entered = runUntil(roomy, state, (s) => s.trains.some((t) => t.work))
+      const w = entered.trains.find((t) => t.work)!
+      expect(entered.timeS).toBeCloseTo(plan.appearsAtS, 0)
+      expect(w.path[0]).toEqual(entryStep(roomy, plan.entry))
+      expect(w.destination).toBe(plan.destination)
+      expect(entered.workTrainPlan).toBeNull()
+    }
+  })
+
+  it('holds an announced work train at its portal while its entry block is taken', () => {
+    let state = planned()
+    const plan = state.workTrainPlan!
+    const entryEdge = entryStep(roomy, plan.entry).edgeId
+    state = { ...state, reservations: { ...state.reservations, [entryEdge]: 'X' } }
+    state = runUntil(roomy, state, (s) => s.timeS >= plan.appearsAtS + 60)
+    expect(state.trains.some((t) => t.work)).toBe(false)
+    expect(workTrainHeld(state)).toBe(true)
+    const free = Object.fromEntries(Object.entries(state.reservations).filter(([edgeId]) => edgeId !== entryEdge))
+    const entered = step(roomy, { ...state, reservations: free }, 0.1)
+    expect(entered.trains.some((t) => t.work)).toBe(true)
+    expect(workTrainHeld(entered)).toBe(false)
   })
 })
 

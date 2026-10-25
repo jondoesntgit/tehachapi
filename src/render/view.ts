@@ -1,5 +1,5 @@
-import type { TrackGraph } from '../engine/trackGraph'
-import type { Train, Vec2 } from '../engine/types'
+import { getEdge, type TrackGraph } from '../engine/trackGraph'
+import type { LevelNode, Train, Vec2 } from '../engine/types'
 
 /**
  * The line is kilometres long but sidings sit only tens of metres off the main, so the view
@@ -10,7 +10,8 @@ export const Y_SCALE = 6
 /** Text height in view units; the whole map scales with the screen, labels included. */
 export const LABEL_SIZE = 110
 
-const PADDING_X = 520
+// Wide enough beside each terminal for its arrival countdowns ("T12 9:59").
+const PADDING_X = 860
 const PADDING_Y = 380
 
 /** CSS pixels in a millimetre. */
@@ -63,10 +64,18 @@ export function destinationColor(graph: TrackGraph, destination: string): string
   return graph.nodes.get(destination)?.color
 }
 
-/** Work trains aren't heading anywhere the dispatcher chose, so they get a neutral color. */
-export const WORK_TRAIN_COLOR = '#d7dee8'
+/** The color a train is drawn in: its destination's color, work trains included. */
+export function trainColor(graph: TrackGraph, train: Pick<Train, 'destination'>): string | undefined {
+  return destinationColor(graph, train.destination)
+}
 
-/** The color a train is drawn in: neutral for a work train, else its destination's color. */
-export function trainColor(graph: TrackGraph, train: Pick<Train, 'work' | 'destination'>): string | undefined {
-  return train.work ? WORK_TRAIN_COLOR : destinationColor(graph, train.destination)
+/** Unit vector, in view space, pointing along the track out through a terminal. */
+export function outward(graph: TrackGraph, node: LevelNode): Vec2 {
+  const edgeId = graph.edgesAt.get(node.id)?.[0]
+  if (!edgeId) return { x: 1, y: 0 }
+  const { polyline, from } = getEdge(graph, edgeId)
+  const inner = toView(from === node.id ? polyline[1] : polyline[polyline.length - 2])
+  const end = toView(node)
+  const length = Math.hypot(end.x - inner.x, end.y - inner.y)
+  return { x: (end.x - inner.x) / length, y: (end.y - inner.y) / length }
 }

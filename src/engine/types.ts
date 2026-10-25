@@ -158,6 +158,15 @@ export interface TrainResult {
   reachedDestination: boolean
 }
 
+/** The next work train, announced at its terminal `ANNOUNCE_LEAD_S` before it enters. */
+export interface WorkTrainPlan {
+  /** Terminal it enters at. */
+  entry: string
+  /** Terminal it is bound for. */
+  destination: string
+  appearsAtS: number
+}
+
 /** When a scheduled train enters and is due out in this game, after any random shift. */
 export interface TimetableEntry {
   appearsAtS: number
@@ -180,6 +189,8 @@ export interface GameState {
   workTrainsSent: number
   /** Game time the next work train goes out (levels with `workTrains`). */
   nextWorkTrainS: number
+  /** The announced work train still to enter, or null if none is announced. */
+  workTrainPlan: WorkTrainPlan | null
   /** Every train was launched and the ones on the board blocked each other for good; the game is over. */
   deadlocked: boolean
   /** Game time since which every train on the board has stood still, or null if one is moving or none are on it. */
