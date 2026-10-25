@@ -74,7 +74,9 @@ export function Help({ onClose }: { onClose: () => void }) {
             </dl>
             <p className="hint">
               Trains cannot reverse. A route takes a siding by itself when the main is held, and is refused if
-              another train is in the way or the train cannot stop in time. Sending a train where it could
+              another train is in the way or the train cannot stop in time. A train may follow another heading
+              the same way: it keeps at least 20 m behind, slowing to match, and can follow it out through its
+              terminal, but it can’t be sent into the block where the train ahead will stop. Sending a train where it could
               only leave by the wrong terminal is refused, and moves its due time 3 minutes earlier.
               Every train is announced at the terminal it will enter by, 10 minutes ahead, with a countdown.
             A work train (W) starts on a siding with 65 minutes to clear before it counts as late; the next arrives 10 minutes after that one is due, and so on. They run at 11.25 mph, one at a time, in their destination’s color; route them like any other train. More trains are kept in play as the game goes on: at least 4 at first, one more every 15 minutes. Your

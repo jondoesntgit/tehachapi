@@ -45,7 +45,7 @@ describe('requestRoute', () => {
     const state = route(graph, withT1(), 'T1', { edgeId: 'SIDING_B', offsetM: 500 })
     const t1 = state.trains[0]
     expect(t1.path.map((s) => s.edgeId)).toEqual(['M1', 'M2', 'M3', 'SIDING_B'])
-    expect(state.reservations).toEqual({ M1: 'T1', M2: 'T1', M3: 'T1', SIDING_B: 'T1' })
+    expect(state.reservations).toEqual({ M1: ['T1'], M2: ['T1'], M3: ['T1'], SIDING_B: ['T1'] })
     const sidingM = getEdge(graph, 'SIDING_B').lengthM
     expect(t1.stopAtM).toBeCloseTo(1000 + 1200 + 1600 + sidingM - STOP_CLEARANCE_M)
   })
@@ -65,7 +65,7 @@ describe('requestRoute', () => {
   it('drops reservations the new route no longer needs', () => {
     let state = route(graph, withT1(), 'T1', { edgeId: 'M3', offsetM: 800 })
     state = route(graph, state, 'T1', { edgeId: 'SIDING_A', offsetM: 600 })
-    expect(state.reservations).toEqual({ M1: 'T1', SIDING_A: 'T1' })
+    expect(state.reservations).toEqual({ M1: ['T1'], SIDING_A: ['T1'] })
   })
 
   it('keeps stop targets clear of the switches at either end of an edge', () => {
@@ -174,7 +174,7 @@ describe('room to stop', () => {
 
   it('reports the train holding the next block with room', () => {
     const state = enter()
-    const held = { ...state, reservations: { ...state.reservations, M3: 'T9' } }
+    const held = { ...state, reservations: { ...state.reservations, M3: ['T9'] } }
     expect(requestRoute(long, held, 'T1', { edgeId: 'M2', offsetM: 600 })).toMatchObject({
       ok: false,
       reason: 'blocked',

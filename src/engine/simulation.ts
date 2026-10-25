@@ -1,4 +1,5 @@
 import { parseClock } from './clock'
+import { followLimitM, release, releaseAll } from './following'
 import { advance } from './physics'
 import { isDeadlocked } from './routing'
 import {
@@ -46,12 +47,17 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
   if (state.deadlocked || state.stalled) return state
   const { trainLengthM, physics } = graph.level
   const timeS = state.timeS + dtS
-  const reservations = { ...state.reservations }
+  let reservations = state.reservations
   const results = [...state.results]
   const trains: Train[] = []
+  // Every follower's limit from where its leader is before anyone moves: leaders only move forward,
+  // so this errs on the safe side and the gap never shrinks below FOLLOW_GAP_M.
+  const limits = new Map(state.trains.map((t) => [t.id, followLimitM(graph, state.trains, t)]))
 
   for (const train of state.trains) {
-    const remainingM = train.stopAtM === null ? null : train.stopAtM - train.headM
+    // Stop at its own stop, or behind the train ahead if that comes first.
+    const targetM = Math.min(train.stopAtM ?? Infinity, limits.get(train.id) ?? Infinity)
+    const remainingM = targetM === Infinity ? null : Math.max(0, targetM - train.headM)
     const moved = advance({
       speedMps: train.speedMps,
       maxSpeedMps: train.maxSpeedMps,
@@ -62,7 +68,7 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
       dtS,
     })
     // Land exactly on the target rather than a rounding error short of it.
-    let headM = moved.distanceM === remainingM ? train.stopAtM! : train.headM + moved.distanceM
+    let headM = moved.distanceM === remainingM ? train.headM + remainingM : train.headM + moved.distanceM
     let { path, stopAtM, arrivedAtS } = train
 
     if (stopAtM === null) {
@@ -70,7 +76,7 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
       if (arrivedAtS === null && headM >= endM) arrivedAtS = timeS
       if (arrivedAtS !== null && headM - trainLengthM >= endM) {
         // Tail is through the portal: the train is gone.
-        for (const s of path) delete reservations[s.edgeId]
+        reservations = releaseAll(reservations, train.id)
         const last = path[path.length - 1]
         results.push(scoreArrival(train, arrivedAtS, stepEndNode(getEdge(graph, last.edgeId), last.direction)))
         continue
@@ -84,7 +90,7 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
       path = path.slice(1)
       headM -= clearedM
       if (stopAtM !== null) stopAtM -= clearedM
-      if (!path.some((s) => s.edgeId === cleared.edgeId)) delete reservations[cleared.edgeId]
+      if (!path.some((s) => s.edgeId === cleared.edgeId)) reservations = release(reservations, cleared.edgeId, train.id)
     }
 
     trains.push({ ...train, speedMps: moved.speedMps, path, headM, stopAtM, arrivedAtS })
@@ -103,9 +109,7 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
 export function skipToNextArrival(state: GameState, leadS = 10): GameState {
   const nextS = nextArrivalS(state)
   if (state.trains.some((t) => !t.work) || nextS === null) return state
-  const reservations = Object.fromEntries(
-    Object.entries(state.reservations).filter(([, holder]) => !state.trains.some((t) => t.id === holder)),
-  )
+  const reservations = state.trains.reduce((acc, t) => releaseAll(acc, t.id), state.reservations)
   return { ...state, trains: [], reservations, timeS: Math.max(state.timeS, nextS - leadS) }
 }
 

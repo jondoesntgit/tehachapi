@@ -1,3 +1,4 @@
+import { claim, followLimitM, heldByOthers, holdersOf, isAheadOn, releaseAll } from './following'
 import { brakingDistance } from './physics'
 import {
   alongStep,
@@ -153,9 +154,62 @@ function resolveStop(graph: TrackGraph, step: RouteStep): { alongM: number; exit
   return { alongM: edge.lengthM - Math.min(STOP_CLEARANCE_M, edge.lengthM / 2), exit: false }
 }
 
+/** A route a train could be given: its whole new path and where it stops (`null` = exit). */
+interface Plan {
+  path: RouteStep[]
+  stopAtM: number | null
+}
+
+/**
+ * Why `train` may not take `path` (stopping at `stopAtM`, `null` = exit) alongside the trains that
+ * already hold its edges: the id of the first train in the way, or `null` if it may. Track from the
+ * head on may be shared only with trains heading the same way that are either
+ * - ahead of `train` on `path` (it follows them), as long as `path` doesn't enter the block such a
+ *   leader will park in (a leader leaving through a terminal can be followed all the way out), or
+ * - behind `train` (they follow it), as long as `train` doesn't park in a block one of them must
+ *   pass through.
+ * So a follower always parks in a block behind its leader, and nobody cuts in between two trains.
+ */
+function sharingConflict(
+  graph: TrackGraph,
+  state: GameState,
+  train: Train,
+  path: readonly RouteStep[],
+  stopAtM: number | null,
+): string | null {
+  const headIndex = locateStep(graph, path, train.headM).index
+  const ahead = path.slice(headIndex)
+  const finalEdge = path[path.length - 1].edgeId
+  // `train` as it would be on this route, so others can be checked against its tail.
+  const routed: Train = { ...train, path: [...path], stopAtM }
+  for (const step of ahead) {
+    for (const holderId of holdersOf(state, step.edgeId)) {
+      if (holderId === train.id) continue
+      const other = state.trains.find((t) => t.id === holderId)
+      if (!other) return holderId
+      const theirs = other.path.find((s) => s.edgeId === step.edgeId)
+      if (!theirs || theirs.direction !== step.direction) return holderId
+      if (isAheadOn(graph, path, train.headM, other)) {
+        // Following: never into the block the leader parks in.
+        const leaderParksIn = other.stopAtM === null ? null : other.path[other.path.length - 1].edgeId
+        if (leaderParksIn !== null && ahead.some((s) => s.edgeId === leaderParksIn)) return holderId
+      } else if (isAheadOn(graph, other.path, other.headM, routed)) {
+        // Being followed: never park where the follower has to pass.
+        if (stopAtM !== null && other.path.some((s) => s.edgeId === finalEdge)) return holderId
+      } else {
+        return holderId
+      }
+    }
+  }
+  return null
+}
+
 /**
  * Asks for a route from a train's head to `target`. On success the train's path, stop point and
  * reservations are replaced from the head onward; edges the train still occupies stay reserved.
+ * The shortest allowed way wins, of: the shortest way there; the shortest that keeps out of blocks
+ * other trains will park in; and the shortest that avoids other trains' track altogether. Sharing
+ * track is allowed only with trains heading the same way (see `sharingConflict`).
  */
 export function requestRoute(
   graph: TrackGraph,
@@ -169,9 +223,7 @@ export function requestRoute(
 
   const head = locateStep(graph, train.path, train.headM)
   const headStep = train.path[head.index]
-  const heldByOthers = new Set(
-    Object.keys(state.reservations).filter((edgeId) => state.reservations[edgeId] !== trainId),
-  )
+  const othersHold = heldByOthers(state, trainId)
 
   // Never send a train somewhere it could only leave by the wrong terminal; the attempt costs time.
   const wrongDestination = (lastStep: RouteStep): RouteResult | null => {
@@ -184,54 +236,67 @@ export function requestRoute(
     }
   }
 
-  let steps: RouteStep[] = []
   const onHeadEdge = target.edgeId === headStep.edgeId ? resolveStop(graph, headStep) : null
-  if (!onHeadEdge || onHeadEdge.alongM <= head.alongM) {
-    const found = findSteps(graph, headStep, target, heldByOthers)
-    if (!found) {
-      const unobstructed = findSteps(graph, headStep, target, new Set())
-      const refused = unobstructed && wrongDestination(unobstructed[unobstructed.length - 1])
-      if (refused) return refused
-      const blockedEdge = unobstructed?.find((step) => heldByOthers.has(step.edgeId))
-      return blockedEdge
-        ? { ok: false, reason: 'blocked', blockedBy: state.reservations[blockedEdge.edgeId] }
-        : { ok: false, reason: 'no-path' }
+  const staysOnHeadEdge = onHeadEdge !== null && onHeadEdge.alongM > head.alongM
+
+  /** The route to the target avoiding `blocked` edges, or null if there is none. */
+  const plan = (blocked: ReadonlySet<string>): Plan | null => {
+    let steps: RouteStep[] = []
+    if (!staysOnHeadEdge) {
+      const found = findSteps(graph, headStep, target, blocked)
+      if (!found) return null
+      steps = found
     }
-    const refused = wrongDestination(found[found.length - 1])
+    // A block too short for the whole train would leave it across a switch: run on to the next one with room.
+    const lastTapped = steps.length > 0 ? steps[steps.length - 1] : headStep
+    const extension = roomAhead(graph, lastTapped, train.destination, blocked)
+    if (!extension) return null
+    steps = [...steps, ...extension]
+    const path = [...train.path.slice(0, head.index + 1), ...steps]
+    const lastStep = path[path.length - 1]
+    const stop = steps.length > 0 ? resolveStop(graph, lastStep) : onHeadEdge!
+    const lastStartM = pathLength(graph, path) - getEdge(graph, lastStep.edgeId).lengthM
+    return { path, stopAtM: stop.exit ? null : lastStartM + stop.alongM }
+  }
+
+  if (!staysOnHeadEdge) {
+    const unobstructed = findSteps(graph, headStep, target, new Set())
+    if (!unobstructed) return { ok: false, reason: 'no-path' }
+    const refused = wrongDestination(unobstructed[unobstructed.length - 1])
     if (refused) return refused
-    steps = found
   }
 
-  // A block too short for the whole train would leave it across a switch: run on to the next one with room.
-  const lastTapped = steps.length > 0 ? steps[steps.length - 1] : headStep
-  const extension = roomAhead(graph, lastTapped, train.destination, heldByOthers)
-  if (!extension) {
-    const unobstructed = roomAhead(graph, lastTapped, train.destination, new Set())
-    const blockedEdge = unobstructed?.find((step) => heldByOthers.has(step.edgeId))
-    return blockedEdge
-      ? { ok: false, reason: 'blocked', blockedBy: state.reservations[blockedEdge.edgeId] }
-      : { ok: false, reason: 'no-path' }
+  const shared = plan(new Set())
+  if (!shared) return { ok: false, reason: 'no-path' }
+  // Sharing track, but around any block another train will park in (e.g. by a siding).
+  const parkedBlocks = new Set(
+    state.trains.filter((t) => t.id !== trainId && t.stopAtM !== null).map((t) => t.path[t.path.length - 1].edgeId),
+  )
+  const aroundParked = plan(parkedBlocks)
+  const alone = plan(othersHold)
+  const candidates = [shared, aroundParked, alone]
+    .filter((p): p is Plan => p !== null)
+    .filter((p) => sharingConflict(graph, state, train, p.path, p.stopAtM) === null)
+    .sort((a, b) => pathLength(graph, a.path) - pathLength(graph, b.path))
+  if (candidates.length === 0) {
+    const blockedBy =
+      sharingConflict(graph, state, train, shared.path, shared.stopAtM) ??
+      holdersOf(state, shared.path.find((s) => othersHold.has(s.edgeId))?.edgeId ?? '').find((id) => id !== trainId)
+    return { ok: false, reason: 'blocked', blockedBy }
   }
-  steps = [...steps, ...extension]
+  const { path, stopAtM } = candidates[0]
 
-  const path = [...train.path.slice(0, head.index + 1), ...steps]
-  const lastStep = path[path.length - 1]
-  const stop = steps.length > 0 ? resolveStop(graph, lastStep) : onHeadEdge!
-  const lastStartM = pathLength(graph, path) - getEdge(graph, lastStep.edgeId).lengthM
-  const stopAtM = lastStartM + stop.alongM
-
+  // It must be able to stop in time: at its own stop, and behind any train it now follows.
+  const routed: Train = { ...train, path, stopAtM }
+  const limitM = followLimitM(graph, state.trains, routed)
+  const mustStopByM = Math.min(stopAtM ?? Infinity, limitM ?? Infinity)
   const decel = graph.level.physics.decelMps2
-  if (!stop.exit && stopAtM - train.headM < brakingDistance(train.speedMps, decel)) {
+  if (mustStopByM - train.headM < brakingDistance(train.speedMps, decel)) {
     return { ok: false, reason: 'too-close' }
   }
 
-  const reservations: Record<string, string> = {}
-  for (const [edgeId, holder] of Object.entries(state.reservations)) {
-    if (holder !== trainId) reservations[edgeId] = holder
-  }
-  for (const step of path) reservations[step.edgeId] = trainId
-
-  const routed: Train = { ...train, path, stopAtM: stop.exit ? null : stopAtM }
+  let reservations = releaseAll(state.reservations, trainId)
+  for (const step of path) reservations = claim(reservations, step.edgeId, trainId)
   return {
     ok: true,
     state: { ...state, reservations, trains: state.trains.map((t) => (t.id === trainId ? routed : t)) },
@@ -245,9 +310,9 @@ export function requestRoute(
 export function canProgress(graph: TrackGraph, state: GameState, train: Train): boolean {
   if (train.stopAtM === null) return true
   const headStep = train.path[locateStep(graph, train.path, train.headM).index]
-  const heldByOthers = new Set(Object.keys(state.reservations).filter((id) => state.reservations[id] !== train.id))
+  const others = heldByOthers(state, train.id)
   return nextSteps(graph, headStep).some(
-    (step) => !heldByOthers.has(step.edgeId) && roomAhead(graph, step, train.destination, heldByOthers) !== null,
+    (step) => !others.has(step.edgeId) && roomAhead(graph, step, train.destination, others) !== null,
   )
 }
 

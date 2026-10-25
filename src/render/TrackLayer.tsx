@@ -1,3 +1,4 @@
+import { followLimitM } from '../engine/following'
 import { pathLength, pathPolyline } from '../engine/trackGraph'
 import type { CSSProperties } from 'react'
 import { useGameStore } from '../store'
@@ -30,8 +31,10 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
         />
       ))}
       {trains.map((train) => {
-        // A train reserves exactly the edges of its path, so its route is the whole path.
-        const route = pathPolyline(graph, train.path, 0, pathLength(graph, train.path)).map(toView)
+        // A train reserves exactly the edges of its path, so its route is the whole path; a follower's
+        // is drawn only up to the train it follows, so shared track shows the leader's color.
+        const endM = Math.min(pathLength(graph, train.path), followLimitM(graph, trains, train) ?? Infinity)
+        const route = pathPolyline(graph, train.path, 0, endM).map(toView)
         // Trim the front, then (reversed) the rear.
         const trimmed = trimEnd(trimEnd(route, trimV).reverse(), trimV)
         return (

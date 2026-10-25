@@ -31,7 +31,7 @@ describe('simulation', () => {
   it('starts with the local standing on siding A, clear of both switches, facing west', () => {
     const state = createInitialState(graph)
     expect(state.trains.map((t) => t.id)).toEqual(['L1'])
-    expect(state.reservations).toEqual({ SIDING_A: 'L1' })
+    expect(state.reservations).toEqual({ SIDING_A: ['L1'] })
     const l1 = state.trains[0]
     expect(l1.speedMps).toBe(0)
     expect(l1.stopAtM).toBe(l1.headM)
@@ -75,7 +75,7 @@ describe('simulation', () => {
     let state = startAtT1()
     state = runUntil(graph, state, (s) => s.trains.length > 0)
     expect(state.timeS).toBeCloseTo(parseClock('10:32'), 0)
-    expect(state.reservations).toEqual({ M1: 'T1' })
+    expect(state.reservations).toEqual({ M1: ['T1'] })
 
     state = runUntil(graph, state, (s) => s.trains[0].speedMps === 0)
     const t1 = state.trains[0]
@@ -98,7 +98,7 @@ describe('simulation', () => {
 
     state = runUntil(graph, state, (s) => s.results.length === 2)
     expect(state.trains.some((t) => t.id === 'T1')).toBe(false)
-    expect(Object.values(state.reservations)).not.toContain('T1')
+    expect(Object.values(state.reservations).flat()).not.toContain('T1')
     expect(state.results[1]).toMatchObject({
       trainId: 'T1',
       exitedAt: 'EAST',
@@ -129,7 +129,7 @@ describe('simulation', () => {
     // Move T1 into the siding; T3 enters as soon as T1's tail clears M1.
     state = route(graph, state, 'T1', { edgeId: 'SIDING_A', offsetM: 1100 })
     state = runUntil(graph, state, (s) => s.trains.some((t) => t.id === 'T3'))
-    expect(state.reservations.M1).toBe('T3')
+    expect(state.reservations.M1).toEqual(['T3'])
     expect(heldAtPortal(graph, state)).toEqual([])
   })
 
@@ -197,7 +197,7 @@ describe('work trains', () => {
       expect(w[0].path).toHaveLength(1)
       expect(w[0].path[0].edgeId).toBe('SIDING_B')
       expect(canReach(withSiding, w[0].path[0], w[0].destination)).toBe(true)
-      expect(state.reservations.SIDING_B).toBe('W1')
+      expect(state.reservations.SIDING_B).toEqual(['W1'])
       expect(w[0].stopAtM).toBe(w[0].headM)
     }
   })
@@ -233,7 +233,7 @@ describe('work trains', () => {
     const still = later.trains.find((t) => t.id === w.id)!
     expect(still.path).toEqual([w.path[0]])
     expect(still.headM).toBe(waiting.trains.find((t) => t.id === w.id)!.headM)
-    expect(Object.keys(later.reservations).filter((e) => later.reservations[e] === w.id)).toEqual([w.path[0].edgeId])
+    expect(Object.keys(later.reservations).filter((e) => later.reservations[e].includes(w.id))).toEqual([w.path[0].edgeId])
   })
 
   it('is due out 65 minutes after it enters, and is scored like any train', () => {
@@ -244,7 +244,7 @@ describe('work trains', () => {
     state = route(roomy, state, w.id, exitOf(w.destination))
     state = runUntil(roomy, state, (s) => !s.trains.some((t) => t.id === w.id))
     expect(state.results).toEqual([expect.objectContaining({ trainId: w.id, exitedAt: w.destination, lateMinutes: 0 })])
-    expect(Object.values(state.reservations)).not.toContain(w.id)
+    expect(Object.values(state.reservations).flat()).not.toContain(w.id)
   })
 
   it('keeps only one on the board; the next waits until it has gone', () => {
@@ -341,7 +341,7 @@ describe('work train announcements', () => {
   it('holds a work train at its portal while its entry block is taken; its due time stays put', () => {
     const { plan, state: announced } = due()
     const entryEdge = entryStep(roomy, plan.entry).edgeId
-    let state = { ...announced, reservations: { ...announced.reservations, [entryEdge]: 'X' } }
+    let state = { ...announced, reservations: { ...announced.reservations, [entryEdge]: ['X'] } }
     state = runUntil(roomy, state, (s) => s.timeS >= plan.appearsAtS + 60)
     expect(state.trains.some((t) => t.work)).toBe(false)
     expect(workTrainHeld(state)).toBe(true)

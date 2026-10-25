@@ -131,7 +131,7 @@ describe('level 1', () => {
       const w1 = state.trains.find((t) => t.work)!
       expect(w1).toMatchObject({ id: 'W1', speedMps: 0, dueAtS: parseClock(level.startTime) + 65 * 60 })
       expect(level.startingTrains![0].edgeChoices).toContain(w1.path[0].edgeId)
-      expect(state.reservations[w1.path[0].edgeId]).toBe('W1')
+      expect(state.reservations[w1.path[0].edgeId]).toEqual(['W1'])
       expect(canReach(graph, w1.path[0], w1.destination)).toBe(true)
       sidings.add(w1.path[0].edgeId)
       // Then one at a terminal 10 minutes after the one before is due, while trains are still to come.

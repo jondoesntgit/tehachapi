@@ -142,7 +142,7 @@ export interface Train {
   speedMps: number
   /**
    * Edges from the one under the tail to the end of the granted route, in travel order.
-   * Every edge in `path` is reserved by this train.
+   * This train holds every edge in `path` (sharing some with trains it follows or that follow it).
    */
   path: RouteStep[]
   /** Head position, measured along `path` from the start of `path[0]`. */
@@ -187,8 +187,12 @@ export interface GameState {
   /** Game clock, seconds since midnight. */
   timeS: number
   trains: Train[]
-  /** edge id -> id of the train holding it. */
-  reservations: Record<string, string>
+  /**
+   * edge id -> ids of the trains holding it, in the order they claimed it. Several trains hold an
+   * edge only when they run the same way along it, one behind another (see `following.ts`); an edge
+   * nobody holds has no entry.
+   */
+  reservations: Record<string, string[]>
   /** Schedule entry ids that have not entered yet, in schedule order. */
   pending: string[]
   /** Schedule entry id -> this game's times. */

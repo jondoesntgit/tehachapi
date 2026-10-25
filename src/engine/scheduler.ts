@@ -1,5 +1,6 @@
 import { parseClock } from './clock'
 import { safeSpeed } from './physics'
+import { claim, isFree } from './following'
 import { canReach, STOP_CLEARANCE_M } from './routing'
 import { getEdge, nextSteps, stepEndNode, type TrackGraph } from './trackGraph'
 import { seededRandom } from './random'
@@ -187,7 +188,7 @@ export function spawnDue(graph: TrackGraph, state: GameState): GameState {
   let next = state
   for (const entry of heldAtPortal(graph, state)) {
     const step = entryStep(graph, entry.entry)
-    if (next.reservations[step.edgeId] !== undefined) continue
+    if (!isFree(next, step.edgeId)) continue
     const edge = getEdge(graph, step.edgeId)
     const stopAtM = edge.lengthM - Math.min(STOP_CLEARANCE_M, edge.lengthM / 2)
     const train: Train = {
@@ -205,7 +206,7 @@ export function spawnDue(graph: TrackGraph, state: GameState): GameState {
     next = {
       ...next,
       trains: [...next.trains, train],
-      reservations: { ...next.reservations, [step.edgeId]: train.id },
+      reservations: claim(next.reservations, step.edgeId, train.id),
       pending: next.pending.filter((id) => id !== entry.id),
     }
   }
@@ -223,7 +224,7 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
   // Its own stream, so placing trains doesn't change which times the timetable draws.
   const random = seed === undefined ? null : seededRandom(seed ^ 0x5eed)
   const trains: Train[] = []
-  const reservations: Record<string, string> = {}
+  const reservations: Record<string, string[]> = {}
   for (const start of graph.level.startingTrains ?? []) {
     // Face the train the way that reaches its destination, preferring the written direction.
     const facing = (id: string): Direction | null => {
@@ -242,7 +243,7 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
     }
     const edge = getEdge(graph, edgeId)
     if (reservations[edge.id] !== undefined) {
-      throw new Error(`Starting trains "${reservations[edge.id]}" and "${start.id}" share edge "${edge.id}"`)
+      throw new Error(`Starting trains "${reservations[edge.id][0]}" and "${start.id}" share edge "${edge.id}"`)
     }
     if (edge.lengthM < trainLengthM + 2 * STOP_CLEARANCE_M) {
       throw new Error(`Starting train "${start.id}" does not fit clear of the switches on edge "${edge.id}"`)
@@ -260,7 +261,7 @@ export function placeStartingTrains(graph: TrackGraph, seed?: number): Pick<Game
       stopAtM: headM,
       arrivedAtS: null,
     })
-    reservations[edge.id] = start.id
+    reservations[edge.id] = [start.id]
   }
   return { trains, reservations }
 }
@@ -329,7 +330,7 @@ export function placeWorkTrainOnSiding(
     arrivedAtS: null,
     work: true,
   }
-  return { trains: [...placed.trains, train], reservations: { ...placed.reservations, [edgeId]: 'W1' } }
+  return { trains: [...placed.trains, train], reservations: claim(placed.reservations, edgeId, 'W1') }
 }
 
 /**
@@ -373,7 +374,7 @@ export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
   if (!plan || state.timeS < plan.appearsAtS) return state
   if (state.trains.filter((t) => t.work).length >= MAX_WORK_TRAINS) return state
   const first = entryStep(graph, plan.entry)
-  if (state.reservations[first.edgeId] !== undefined) return state
+  if (!isFree(state, first.edgeId)) return state
 
   const { decelMps2, stopMarginM } = graph.level.physics
   const edge = getEdge(graph, first.edgeId)
@@ -396,7 +397,7 @@ export function spawnWorkTrain(graph: TrackGraph, state: GameState): GameState {
   return {
     ...state,
     trains: [...state.trains, train],
-    reservations: { ...state.reservations, [first.edgeId]: id },
+    reservations: claim(state.reservations, first.edgeId, id),
     workTrainsSent: sent,
   }
 }

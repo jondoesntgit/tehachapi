@@ -10,7 +10,7 @@ A browser-first railroad dispatching game. The player routes trains along a real
 The MVP is done and deployed: level 1 is playable end to end.
 
 Working today:
-- Engine: track graph, routing with reservations, exact-stop physics, clock, scheduler, scoring.
+- Engine: track graph, routing with reservations, following (shared track, moving stop target), exact-stop physics, clock, scheduler, scoring.
 - SVG map, tap-to-route, HUD (clock, 1×/5×/10×/60× with double-tap to hold 5×, skip to next train, route-refused messages); each train's label shows minutes until it's due.
 - Arrival countdowns: every train (work trains too) is announced beside its entry terminal 10 minutes before it enters.
 - Game codes and tournament mode: every game has a code; the same code deals the same game, so players can compare scores.
@@ -68,6 +68,7 @@ src/
     physics.ts       # advance(): one train, one timestep (accel, cruise, brake, exact stop)
     clock.ts         # "HH:MM" <-> seconds since midnight
     random.ts        # seededRandom(seed): deterministic PRNG
+    following.ts     # Shared track claims (holders per edge), leader/follower positions, followLimitM
     gameCode.ts      # Game codes <-> seeds: normalizeGameCode, seedFromGameCode, randomGameCode
     scheduler.ts     # Timetable (random shifts), spawning, starting trains, scoring, level-complete check
     simulation.ts    # createInitialState(graph, seed?), step(graph, state, dtS), skipToNextArrival
@@ -88,6 +89,7 @@ levels/
 tests/               # Vitest; all tests target src/engine
   fixtures/two-sidings.json  # Frozen layout for engine unit tests (helpers.ts `graph`)
   level-01.test.ts   # Shipped level 1 (helpers.ts `graph1`): layout, timetable, scripted playthrough
+  following.test.ts  # Following: safety across speeds, sharing rules, whole-game no-touch check
 ```
 
 ESLint fails the build if anything under `src/engine` imports React, Zustand, the store, `render/` or `input/`, or touches `window`, `document`, `performance`, `requestAnimationFrame` or `Date.now`.
@@ -104,15 +106,17 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Train position:** a train stores `path` (the `RouteStep[]` from the edge under its tail to the end of its granted route) and `headM` (head distance along that path). The body is the `trainLengthM` behind the head. `locateOnPath` converts to `{ edgeId, offsetM, direction }` when needed. All trains share the same length.
 - **Stop target:** `stopAtM`, measured like `headM`. `null` means the train is leaving: it runs off the end of its path through a terminal.
 - **Routes** (`requestRoute`):
-  - The shortest path that avoids edges reserved by other trains wins, so a train takes a siding by itself when the main is held.
-  - On success, every edge in the train's path is reserved by it (`GameState.reservations`). Reserved edges render in the color of the train holding them.
+  - Three ways are planned: the shortest way there, the shortest that keeps out of blocks other trains will park in (their last path edge), and the shortest that avoids every edge other trains hold. The shortest of them that `sharingConflict` allows wins, so a train takes a siding by itself when the main is held by a train it can't follow.
+  - **Following (shared track, `following.ts`):** `GameState.reservations` maps each edge to the ids of every train holding it. Track from the head on may be shared only with trains running the same way along it that are either ahead of the train on its new path (it follows them; its path may not enter the block a parking leader will stop in, but may follow an exiting leader all the way out) or behind it (they follow it; it may not park in a block one of them must pass). Anything else, an opposing train or one that would be cut in front of, refuses with `blocked`. So a follower always parks in a block behind its leader, and no train cuts in between two others.
+  - On success, every edge in the train's path is claimed by it (`claim`), alongside any trains it shares with. Reserved edges render in the color of the train holding them; a follower's route is drawn only up to its leader (`followLimitM`), so shared track shows the leader's color.
   - A train pulls up to the far end of the tapped edge (block), `STOP_CLEARANCE_M` (20 m) short of the switch, wherever in it the tap landed, so the block behind it is clear and a stopped train never fouls a switch (`resolveStop`).
   - A train never stops in a block too short to hold it clear of both switches (`hasRoom`: `trainLengthM + 2 × STOP_CLEARANCE_M`); `roomAhead` runs it on to the nearest block ahead with room that still leads to its destination.
   - Each end of track always has room to clear arriving trains: a target anywhere in a block that ends at a terminal becomes an exit. The store shows a message when a train clears its terminal late (on-time arrivals show only as chips).
   - Refusals: `no-path`, `blocked` (names the train in the way), `too-close` (cannot brake in time), `departing`, `wrong-destination`.
   - `wrong-destination`: from the target, the train could only leave by a terminal other than its destination (`canReach`). The refusal carries a new `state` in which the train's due time is `WRONG_DESTINATION_PENALTY_S` (3 min) earlier; the store applies it.
-- **Releasing:** in `step`, an edge is dropped from `path` and its reservation released once the tail clears it.
-- **Physics, per train each step** (`advance`):
+- **Releasing:** in `step`, an edge is dropped from `path` and the train's own claim on it released (`release`) once the tail clears it; other trains sharing it keep theirs.
+- **Moving stop target (following):** each `step`, a train stops at the nearer of its own `stopAtM` and `followLimitM`: `FOLLOW_GAP_M` (20 m) short of the tail of the nearest train ahead of it on its path, running the same way. Limits are computed from positions before anyone moves; a leader only moves forward, so the target only recedes and the follower, braking with the ordinary `advance` physics, can never close within the gap, however fast it is and however slow the leader (`tests/following.test.ts` checks this across speeds, plus whole level-1 games with an eager dispatcher, asserting no two bodies ever come within the gap). A route is refused `too-close` if the train can't stop behind its new leader. A follower cruises at its top speed until its braking distance to the leader's tail runs out, then slows to keep the gap.
+- **Physics, per train each step** (`advance`; the stop target is the moving one above):
   - `brakingDistance = v² / (2 · decel)`.
   - If `distanceRemaining <= brakingDistance + margin`, the train brakes, down to `CREEP_SPEED_MPS` (1 m/s), and creeps the last few meters.
   - Otherwise it accelerates at `accel` up to `maxSpeed`.
@@ -169,10 +173,11 @@ Done:
 5. Clock, HUD, scheduler from JSON, fast-forward.
 6. Level 1: four sidings, a wye to an SE line running under the main to the east (two passing sidings), a SW branch running under the main to the west (two passing sidings), both tinted and labelled; thirty-three trains (including three waves of four, one from each terminal, at 10:27–10:30, 10:45–10:47 and 11:27–11:38; three waiting at the start on random sidings), a rising minimum of scheduled trains in play (4, plus one every 15 minutes), at least three forced passes every game, scoring out of 100, dispatchable work trains at 11.25 mph (one starting on a siding, then one 10 minutes after each is due; one at a time), randomized entry times, trains colored by destination (work trains too), 10-minute arrival countdowns beside each terminal.
 7. Game codes and tournament mode: shareable codes/links that deal the same game for everyone, replayable from the 🏆 panel.
+8. Following: trains heading the same way may share track, keeping 20 m behind the leader (moving stop target), following it out through its terminal, parking only in a block behind it.
 
 Next:
-8. Per-train end-of-level score breakdown (deadlock detection and the score are done).
-9. Pan/zoom for layouts larger than the screen.
-10. More levels and a level picker.
-11. PWA install on iPhone (needs HTTPS on the Pages domain).
-12. Capacitor iOS/Android builds.
+9. Per-train end-of-level score breakdown (deadlock detection and the score are done).
+10. Pan/zoom for layouts larger than the screen.
+11. More levels and a level picker.
+12. PWA install on iPhone (needs HTTPS on the Pages domain).
+13. Capacitor iOS/Android builds.
