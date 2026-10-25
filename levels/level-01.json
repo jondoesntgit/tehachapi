@@ -33,7 +33,7 @@
     { "id": "SW_C2", "x": 4000, "y": 0, "kind": "switch" },
     { "id": "SW_D1", "x": 4700, "y": 0, "kind": "switch" },
     { "id": "SW_D2", "x": 5300, "y": 0, "kind": "switch" },
-    { "id": "EAST",  "x": 6000, "y": 0, "kind": "terminal", "label": "East Terminal", "color": "#b98cff" }
+    { "id": "EAST",  "x": 6000, "y": 0, "kind": "terminal", "label": "East Terminal", "color": "#34d399" }
   ],
   "edges": [
     { "id": "M1", "from": "WEST",  "to": "SW_A1" },
