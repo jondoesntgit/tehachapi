@@ -75,6 +75,12 @@ body,
   stroke-width: 3;
 }
 
+/* A terminal: a little box in the color of trains heading there, filled so the track ends inside it. */
+.terminal-box {
+  fill: var(--bg);
+  stroke: var(--terminal-color, var(--muted));
+}
+
 /* The line carries on on the other page. */
 .portal-link {
   stroke-dasharray: 4 4;

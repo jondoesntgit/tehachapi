@@ -1,8 +1,8 @@
 import { useCallback, type MouseEvent } from 'react'
 import { followLimitM } from '../engine/following'
-import { distance, distanceToPolyline, getEdge, nearestTrackPosition, pathLength } from '../engine/trackGraph'
+import { distanceToPolyline, getEdge, nearestTrackPosition, pathLength } from '../engine/trackGraph'
 import type { TrackPosition, Train, Vec2 } from '../engine/types'
-import { edgePage, pagePolylines, toView, Y_SCALE } from '../render/view'
+import { edgePage, pagePolylines, TERMINAL_BOX_HALF, toView, Y_SCALE } from '../render/view'
 import { useGameStore } from '../store'
 
 /** Half of a 44 pt touch target. */
@@ -34,6 +34,22 @@ export function useTapRouting() {
       }
       return best
     }
+    // A tap on a terminal's box means "leave through it", so aim at the very end of its track. It
+    // wins over a train passing through the box, so the box always works.
+    if (selectedTrainId) {
+      const reachV = Math.max(TERMINAL_BOX_HALF, TRACK_RADIUS_PX * unitsPerPx)
+      for (const node of graph.nodes.values()) {
+        const edgeId = graph.edgesAt.get(node.id)?.[0]
+        if (node.kind !== 'terminal' || !edgeId || (node.page ?? 1) !== page) continue
+        const p = toView(node)
+        if (Math.abs(tap.x - p.x) <= reachV && Math.abs(tap.y - p.y) <= reachV) {
+          const edge = getEdge(graph, edgeId)
+          routeSelectedTo({ edgeId, offsetM: edge.from === node.id ? 0 : edge.lengthM })
+          return
+        }
+      }
+    }
+
     const tapped =
       nearestTrain((t) => t.headM - graph.level.trainLengthM, (t) => t.headM, TAP_RADIUS_PX) ??
       nearestTrain(
@@ -46,17 +62,6 @@ export function useTapRouting() {
       return
     }
     if (!selectedTrainId) return
-
-    // A tap on a terminal means "leave through it", so aim at the very end of its track.
-    for (const node of graph.nodes.values()) {
-      const edgeId = graph.edgesAt.get(node.id)?.[0]
-      if (node.kind !== 'terminal' || !edgeId || (node.page ?? 1) !== page) continue
-      if (distance(tap, toView(node)) <= TRACK_RADIUS_PX * unitsPerPx) {
-        const edge = getEdge(graph, edgeId)
-        routeSelectedTo({ edgeId, offsetM: edge.from === node.id ? 0 : edge.lengthM })
-        return
-      }
-    }
 
     const nearest = nearestTrackPosition(graph, tap, Y_SCALE, (id) => edgePage(graph, id) === page)
     if (nearest && nearest.distance <= TRACK_RADIUS_PX * unitsPerPx) {

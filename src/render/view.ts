@@ -14,6 +14,9 @@ export const LABEL_SIZE = 110
 const PADDING_X = 860
 const PADDING_Y = 380
 
+/** Half the side of the little box drawn at each terminal, in view units. */
+export const TERMINAL_BOX_HALF = 75
+
 /** CSS pixels in a millimetre. */
 export const PX_PER_MM = 96 / 25.4
 

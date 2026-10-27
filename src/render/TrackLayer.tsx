@@ -2,7 +2,7 @@ import { followLimitM } from '../engine/following'
 import { pathLength } from '../engine/trackGraph'
 import type { CSSProperties } from 'react'
 import { useGameStore } from '../store'
-import { edgePage, LABEL_SIZE, outward, pagePolylines, pointsAttr, PX_PER_MM, toView, trainColor, trimEnd, viewPointsAttr } from './view'
+import { edgePage, LABEL_SIZE, TERMINAL_BOX_HALF, outward, pagePolylines, pointsAttr, PX_PER_MM, toView, trainColor, trimEnd, viewPointsAttr } from './view'
 
 /** Clear screen space between the ends of two trains' routes, so they never touch. */
 const ROUTE_GAP_MM = 1
@@ -56,22 +56,34 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
         if (node.kind !== 'terminal' && node.kind !== 'link') {
           return node.kind === 'switch' ? <circle key={node.id} className="switch" cx={p.x} cy={p.y} r={30} /> : null
         }
-        // The bar crosses the track. The label sits under the bar, or past the end of a track that runs down.
+        // A terminal is a little box at the end of the line (tap it to send a train out there); a link
+        // is a dashed bar across the track. The label sits underneath, or past the end of a track that runs down.
         const out = outward(graph, node)
         const horizontal = Math.abs(out.x) >= Math.abs(out.y)
         const labelY = horizontal ? p.y + PORTAL_HALF + LABEL_SIZE * 1.2 : p.y + Math.sign(out.y) * LABEL_SIZE * 1.6
         return (
           <g key={node.id}>
-            <line
-              // A new key each time a train enters here restarts the pulse animation.
-              key={entryCounts[node.id] ?? 0}
-              // A link's bar is dashed: the track carries on on the other page.
-              className={node.kind === 'link' ? 'portal portal-link' : entryCounts[node.id] ? 'portal portal-entered' : 'portal'}
-              x1={p.x - out.y * PORTAL_HALF}
-              y1={p.y + out.x * PORTAL_HALF}
-              x2={p.x + out.y * PORTAL_HALF}
-              y2={p.y - out.x * PORTAL_HALF}
-            />
+            {node.kind === 'terminal' ? (
+              <rect
+                // A new key each time a train enters here restarts the pulse animation.
+                key={entryCounts[node.id] ?? 0}
+                className={entryCounts[node.id] ? 'portal terminal-box portal-entered' : 'portal terminal-box'}
+                style={{ '--terminal-color': node.color } as CSSProperties}
+                x={p.x - TERMINAL_BOX_HALF}
+                y={p.y - TERMINAL_BOX_HALF}
+                width={2 * TERMINAL_BOX_HALF}
+                height={2 * TERMINAL_BOX_HALF}
+              />
+            ) : (
+              // The track carries on on the other page.
+              <line
+                className="portal portal-link"
+                x1={p.x - out.y * PORTAL_HALF}
+                y1={p.y + out.x * PORTAL_HALF}
+                x2={p.x + out.y * PORTAL_HALF}
+                y2={p.y - out.x * PORTAL_HALF}
+              />
+            )}
             {/* Named in the color of trains heading there. */}
             <text className="label" x={p.x} y={labelY} fontSize={LABEL_SIZE} textAnchor="middle" style={{ fill: node.color }}>
               {node.label ?? node.id}
