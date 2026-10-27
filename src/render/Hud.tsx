@@ -64,7 +64,8 @@ export function Hud() {
         </div>
         <div className="buttons">
           {pageCount(graph) > 1 &&
-            Array.from({ length: pageCount(graph) }, (_, i) => i + 1).map((p) => {
+            // Highest page first: P2 sits left of P1.
+            Array.from({ length: pageCount(graph) }, (_, i) => pageCount(graph) - i).map((p) => {
               // How many trains are on a page you aren't looking at.
               const count = p === page ? 0 : game.trains.filter((t) => trainPage(graph, t) === p).length
               return (

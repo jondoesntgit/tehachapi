@@ -48,11 +48,10 @@ describe('level 1', () => {
     expect(route?.at(-1)?.edgeId).toBe('P2_B9')
   })
 
-  it('gives page 2 sidings half as far off the main, and double track over 30% of it', () => {
+  it('sets every siding, on both pages, the same 34.5 m off its main, and double track over 30% of page 2', () => {
     const offset = (id: string) => Math.max(...getEdge(graph, id).polyline.map((p, _, all) => Math.abs(p.y - all[0].y)))
-    expect(offset('SIDING_A')).toBe(60)
-    for (const id of ['P2_ASIDING_1', 'P2_ASIDING_2', 'P2_BSIDING_1', 'P2_BSIDING_2', 'P2_ADOUBLE_1', 'P2_BDOUBLE_2']) {
-      expect(offset(id)).toBe(30)
+    for (const id of ['SIDING_A', 'SIDING_B', 'SIDING_C', 'SIDING_D', 'SE_LOOP', 'SE_LOOP2', 'SW_SIDING1', 'SW_SIDING2', 'P2_ASIDING_1', 'P2_ASIDING_2', 'P2_BSIDING_1', 'P2_BSIDING_2', 'P2_ADOUBLE_1', 'P2_BDOUBLE_2']) {
+      expect(offset(id)).toBe(34.5)
       expect(hasRoom(graph, { edgeId: id, direction: 1 })).toBe(true)
     }
     // The main along both rows, against the stretches with a second track beside it.
