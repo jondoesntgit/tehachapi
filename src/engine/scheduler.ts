@@ -346,7 +346,8 @@ export function buildWorkTimetable(
   timetable: Record<string, TimetableEntry>,
 ): WorkTrainPlan[] {
   if (!graph.level.workTrains) return []
-  const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal').map((n) => n.id)
+  // Work trains run on the dispatcher's own page.
+  const terminals = [...graph.nodes.values()].filter((n) => n.kind === 'terminal' && (n.page ?? 1) === 1).map((n) => n.id)
   const exitsAt = (entry: string) => exitsFrom(graph, entryStep(graph, entry)).filter((id) => id !== entry)
   const entries = terminals.filter((id) => exitsAt(id).length > 0)
   if (entries.length === 0) return []
@@ -430,5 +431,5 @@ export function scoreArrival(train: Train, arrivedAtS: number, exitedAt: string)
 /** The game is over: every train is through, the board deadlocked, or nothing moved for too long. */
 export function isLevelComplete(state: GameState): boolean {
   // Work trains left running don't hold the game open.
-  return state.deadlocked || state.stalled || (state.pending.length === 0 && state.trains.every((t) => t.work))
+  return state.deadlocked || state.stalled || (state.pending.length === 0 && state.trains.every((t) => t.work || t.transit))
 }

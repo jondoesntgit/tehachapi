@@ -89,6 +89,12 @@ export function buildGraph(level: Level): TrackGraph {
     }
   }
 
+  for (const c of level.continuations ?? []) {
+    for (const id of [c.from, c.to, c.exit]) {
+      if (nodes.get(id)?.kind !== 'terminal') throw new Error(`Continuation from "${c.from}" references "${id}", which is not a terminal`)
+    }
+  }
+
   return { level, nodes, edges, edgesAt }
 }
 
@@ -276,9 +282,15 @@ export interface NearestTrack extends TrackPosition {
  * Closest point on any edge. `yScale` supports renderers that exaggerate the vertical axis:
  * pass the point in that scaled space and the track is scaled to match before measuring.
  */
-export function nearestTrackPosition(graph: TrackGraph, p: Vec2, yScale = 1): NearestTrack | null {
+export function nearestTrackPosition(
+  graph: TrackGraph,
+  p: Vec2,
+  yScale = 1,
+  include: (edgeId: string) => boolean = () => true,
+): NearestTrack | null {
   let best: NearestTrack | null = null
   for (const edge of graph.edges.values()) {
+    if (!include(edge.id)) continue
     const total = edge.cumulativeM[edge.cumulativeM.length - 1]
     for (let i = 1; i < edge.polyline.length; i++) {
       const a = edge.polyline[i - 1]

@@ -12,6 +12,7 @@ import {
 import { TIME_SCALES, useGameStore } from '../store'
 import { Help } from './Help'
 import { Tournament } from './Tournament'
+import { pageCount, trainPage } from './view'
 
 const MESSAGE_MS = 3000
 /** The speed a double tap holds. */
@@ -28,7 +29,8 @@ export function Hud() {
   const gameCode = useGameStore((s) => s.gameCode)
   const tournament = useGameStore((s) => s.tournament)
   const tournamentOpen = useGameStore((s) => s.tournamentOpen)
-  const { setTimeScale, skipAhead, clearMessage, setHelpOpen, setTournamentOpen, restart } = useGameStore.getState()
+  const page = useGameStore((s) => s.page)
+  const { setPage, setTimeScale, skipAhead, clearMessage, setHelpOpen, setTournamentOpen, restart } = useGameStore.getState()
 
   // Two taps on 5× in quick succession hold it there, even when trains enter.
   const lastTap = useRef<{ scale: number; at: number } | null>(null)
@@ -46,7 +48,7 @@ export function Hud() {
   }, [message, clearMessage])
 
   const held = [...heldAtPortal(graph, game).map((e) => e.name), ...(workTrainHeld(game) ? ['Work train'] : [])]
-  const canSkip = game.trains.every((t) => t.work) && nextArrivalS(game) !== null
+  const canSkip = game.trains.every((t) => t.work || t.transit) && nextArrivalS(game) !== null
   const complete = isLevelComplete(game)
 
   return (
@@ -61,6 +63,17 @@ export function Hud() {
           )}
         </div>
         <div className="buttons">
+          {pageCount(graph) > 1 &&
+            Array.from({ length: pageCount(graph) }, (_, i) => i + 1).map((p) => {
+              // How many trains are on a page you aren't looking at.
+              const count = p === page ? 0 : game.trains.filter((t) => trainPage(graph, t) === p).length
+              return (
+                <button key={`P${p}`} className={p === page ? 'active' : ''} onClick={() => setPage(p)} aria-label={`Page ${p}`}>
+                  P{p}
+                  {count > 0 && <span className="lock"> ·{count}</span>}
+                </button>
+              )
+            })}
           {TIME_SCALES.map((scale) => (
             <button
               key={scale}

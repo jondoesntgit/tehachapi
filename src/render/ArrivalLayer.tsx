@@ -22,6 +22,7 @@ function countdown(appearsAtS: number, timeS: number): string {
 export function ArrivalLayer() {
   const graph = useGameStore((s) => s.graph)
   const game = useGameStore((s) => s.game)
+  const page = useGameStore((s) => s.page)
   const byEntry = new Map<string, Announcement[]>()
   for (const a of announcedTrains(graph, game)) byEntry.set(a.entry, [...(byEntry.get(a.entry) ?? []), a])
 
@@ -29,6 +30,7 @@ export function ArrivalLayer() {
     <g>
       {[...byEntry].map(([terminalId, arrivals]) => {
         const node = graph.nodes.get(terminalId)!
+        if ((node.page ?? 1) !== page) return null
         const p = toView(node)
         const out = outward(graph, node)
         // Past the end of the line, reading away from the map; the soonest sits level with the track.

@@ -2,7 +2,7 @@ import { followLimitM } from '../engine/following'
 import { pathLength, pathPolyline } from '../engine/trackGraph'
 import type { CSSProperties } from 'react'
 import { useGameStore } from '../store'
-import { LABEL_SIZE, outward, pointsAttr, PX_PER_MM, toView, trainColor, trimEnd, viewPointsAttr } from './view'
+import { edgePage, LABEL_SIZE, outward, pointsAttr, PX_PER_MM, toView, trainColor, trainPage, trimEnd, viewPointsAttr } from './view'
 
 /** Clear screen space between the ends of two trains' routes, so they never touch. */
 const ROUTE_GAP_MM = 1
@@ -14,6 +14,7 @@ const PORTAL_HALF = 90
 
 export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
   const graph = useGameStore((s) => s.graph)
+  const page = useGameStore((s) => s.page)
   const trains = useGameStore((s) => s.game.trains)
   const entryCounts = useGameStore((s) => s.entryCounts)
   const branchOf = new Map(graph.level.edges.map((e) => [e.id, e.branch]))
@@ -22,7 +23,7 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
 
   return (
     <g>
-      {[...graph.edges.values()].map((edge) => (
+      {[...graph.edges.values()].filter((edge) => edgePage(graph, edge.id) === page).map((edge) => (
         <polyline
           key={edge.id}
           className={branchOf.get(edge.id) ? 'track track-branch' : 'track'}
@@ -30,7 +31,7 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
           points={pointsAttr(edge.polyline)}
         />
       ))}
-      {trains.map((train) => {
+      {trains.filter((train) => trainPage(graph, train) === page).map((train) => {
         // A train reserves exactly the edges of its path, so its route is the whole path; a follower's
         // is drawn only up to the train it follows, so shared track shows the leader's color.
         const endM = Math.min(pathLength(graph, train.path), followLimitM(graph, trains, train) ?? Infinity)
@@ -49,7 +50,7 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
           )
         )
       })}
-      {[...graph.nodes.values()].map((node) => {
+      {[...graph.nodes.values()].filter((node) => (node.page ?? 1) === page).map((node) => {
         const p = toView(node)
         if (node.kind !== 'terminal') {
           return node.kind === 'switch' ? <circle key={node.id} className="switch" cx={p.x} cy={p.y} r={30} /> : null
@@ -76,7 +77,7 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
           </g>
         )
       })}
-      {(graph.level.labels ?? []).map((label) => {
+      {(graph.level.labels ?? []).filter((label) => (label.page ?? 1) === page).map((label) => {
         const p = toView(label)
         return (
           <text key={label.text} className="label map-label" x={p.x} y={p.y} fontSize={LABEL_SIZE} style={{ fill: label.color }}>

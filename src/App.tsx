@@ -41,6 +41,7 @@ function useUnitsPerPx(svgRef: RefObject<SVGSVGElement | null>): number {
 
 export function App() {
   const graph = useGameStore((s) => s.graph)
+  const page = useGameStore((s) => s.page)
   const onTap = useTapRouting()
   const svgRef = useRef<SVGSVGElement>(null)
   const unitsPerPx = useUnitsPerPx(svgRef)
@@ -48,7 +49,7 @@ export function App() {
 
   return (
     <main className="app">
-      <svg ref={svgRef} className="map" viewBox={viewBox(graph)} preserveAspectRatio="xMidYMid meet" onClick={onTap}>
+      <svg ref={svgRef} className="map" viewBox={viewBox(graph, page)} preserveAspectRatio="xMidYMid meet" onClick={onTap}>
         <TrackLayer unitsPerPx={unitsPerPx} />
         <TrainLayer />
         <ArrivalLayer />

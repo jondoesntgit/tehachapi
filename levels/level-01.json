@@ -28,6 +28,9 @@
     { "id": "SW_E4", "x": 4000, "y": 180, "kind": "switch" },
     { "id": "SW_E1", "x": 4200, "y": 180, "kind": "switch" },
     { "id": "SW_E2", "x": 4800, "y": 180, "kind": "switch" },
+    { "id": "P2_EAST", "x": 6000, "y": 0, "kind": "terminal", "label": "from West Terminal", "page": 2 },
+    { "id": "P2_MID", "x": 3000, "y": 0, "kind": "point", "page": 2 },
+    { "id": "P2_WEST", "x": 0, "y": 0, "kind": "terminal", "label": "Westward", "page": 2 },
     { "id": "SOUTHEAST", "x": 6000, "y": 180, "kind": "terminal", "label": "SE-Terminal", "color": "#ffdc3c" },
     { "id": "SW_C1", "x": 3400, "y": 0, "kind": "switch" },
     { "id": "SW_C2", "x": 4000, "y": 0, "kind": "switch" },
@@ -67,7 +70,12 @@
     { "id": "SE1C", "from": "SW_E4", "to": "SW_E1", "branch": "SOUTHEAST" },
     { "id": "SE2", "from": "SW_E1", "to": "SW_E2", "branch": "SOUTHEAST" },
     { "id": "SE_LOOP", "from": "SW_E1", "to": "SW_E2", "points": [[4300, 120], [4700, 120]], "branch": "SOUTHEAST" },
-    { "id": "SE3", "from": "SW_E2", "to": "SOUTHEAST", "branch": "SOUTHEAST" }
+    { "id": "SE3", "from": "SW_E2", "to": "SOUTHEAST", "branch": "SOUTHEAST" },
+    { "id": "P2_M1", "from": "P2_WEST", "to": "P2_MID", "page": 2 },
+    { "id": "P2_M2", "from": "P2_MID", "to": "P2_EAST", "page": 2 }
+  ],
+  "continuations": [
+    { "from": "WEST", "to": "P2_EAST", "exit": "P2_WEST" }
   ],
   "labels": [
     { "text": "to SE-Terminal", "x": 4900, "y": 150, "color": "#ffdc3c" },

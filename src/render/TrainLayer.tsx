@@ -2,7 +2,7 @@ import { locateOnPath, getEdge, pathPolyline, pointAt } from '../engine/trackGra
 import { WORK_TRAIN_LABEL } from '../engine/scheduler'
 import { useGameStore } from '../store'
 import type { CSSProperties } from 'react'
-import { LABEL_SIZE, pointsAttr, toView, trainColor } from './view'
+import { LABEL_SIZE, pointsAttr, toView, trainColor, trainPage } from './view'
 
 /** Minutes until a train is due at its destination, or how late it already is. */
 function dueIn(dueAtS: number, timeS: number): string {
@@ -13,13 +13,14 @@ function dueIn(dueAtS: number, timeS: number): string {
 export function TrainLayer() {
   const graph = useGameStore((s) => s.graph)
   const trains = useGameStore((s) => s.game.trains)
+  const page = useGameStore((s) => s.page)
   const selectedTrainId = useGameStore((s) => s.selectedTrainId)
   const timeS = useGameStore((s) => s.game.timeS)
   const { trainLengthM } = graph.level
 
   return (
     <g>
-      {trains.map((train) => {
+      {trains.filter((train) => trainPage(graph, train) === page).map((train) => {
         const selected = train.id === selectedTrainId
         const body = pathPolyline(graph, train.path, train.headM - trainLengthM, train.headM)
         const head = toView(body[body.length - 1])
@@ -34,7 +35,10 @@ export function TrainLayer() {
               points={pointsAttr(body)}
             />
             <text className="label train-label" x={head.x} y={head.y - 90} fontSize={LABEL_SIZE} textAnchor="middle">
-              {`${train.work ? WORK_TRAIN_LABEL : train.id} · ${dueIn(train.dueAtS, timeS)}`}
+              {/* A train carrying on past its terminal has already been scored: no countdown. */}
+              {train.transit
+                ? train.id
+                : `${train.work ? WORK_TRAIN_LABEL : train.id} · ${dueIn(train.dueAtS, timeS)}`}
             </text>
           </g>
         )

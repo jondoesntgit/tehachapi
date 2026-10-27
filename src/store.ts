@@ -21,6 +21,8 @@ interface GameStore {
   message: string | null
   /** The help panel is open; the simulation is paused while it is. */
   helpOpen: boolean
+  /** Which page of the map is showing (1 or 2). */
+  page: number
   /** This game's code; the same code always deals the same game. */
   gameCode: string
   /** Tournament mode: restarting replays `gameCode` rather than dealing a new one. */
@@ -37,6 +39,7 @@ interface GameStore {
   skipAhead: () => void
   clearMessage: () => void
   setHelpOpen: (open: boolean) => void
+  setPage: (page: number) => void
   /** Starts over: the same code in tournament mode, a new one otherwise. */
   restart: () => void
   /** Enters tournament mode and starts the game for `text`; false if it isn't a usable code. */
@@ -118,6 +121,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   speedLocked: false,
   message: null,
   helpOpen: false,
+  page: 1,
   gameCode: initialCode,
   tournament: linkedCode !== null,
   tournamentOpen: false,
@@ -137,7 +141,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // A train entering is the dispatcher's cue to act, so drop out of fast-forward.
     const newTrains = next.trains.filter((t) => !game.trains.some((g) => g.id === t.id))
     // Work trains don't need the dispatcher, so they don't end fast-forward.
-    const entered = newTrains.some((t) => !t.work)
+    const entered = newTrains.some((t) => !t.work && !t.transit)
     const entryCounts = { ...get().entryCounts }
     for (const train of newTrains) {
       const first = graph.edges.get(train.path[0].edgeId)!
@@ -177,6 +181,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   clearMessage: () => set({ message: null }),
 
   setHelpOpen: (helpOpen) => set({ helpOpen }),
+
+  // Changing page drops the selection: a train on the other page can't be routed from here.
+  setPage: (page) => set({ page, selectedTrainId: null }),
 
   restart: () => {
     const { tournament, gameCode } = get()

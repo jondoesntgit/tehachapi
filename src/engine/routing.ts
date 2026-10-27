@@ -219,8 +219,9 @@ export function requestRoute(
 ): RouteResult {
   const train = state.trains.find((t) => t.id === trainId)
   if (!train) return { ok: false, reason: 'no-path' }
-  // A train on its way out can still be rerouted, until its head reaches the terminal.
-  if (train.arrivedAtS !== null) return { ok: false, reason: 'departing' }
+  // A train on its way out can still be rerouted, until its head reaches the terminal. One carrying
+  // on along a continuation has already left the dispatcher's line.
+  if (train.arrivedAtS !== null || train.transit) return { ok: false, reason: 'departing' }
 
   const head = locateStep(graph, train.path, train.headM)
   const headStep = train.path[head.index]
@@ -323,7 +324,9 @@ export function canProgress(graph: TrackGraph, state: GameState, train: Train): 
  */
 export function isDeadlocked(graph: TrackGraph, state: GameState): boolean {
   const allLaunched = state.pending.every((id) => state.timetable[id].appearsAtS <= state.timeS)
-  if (!allLaunched || state.trains.length === 0) return false
-  if (state.trains.some((t) => t.speedMps > 0 || t.stopAtM === null)) return false
-  return !state.trains.some((t) => canProgress(graph, state, t))
+  // Trains carrying on along a continuation run themselves and are left out.
+  const board = state.trains.filter((t) => !t.transit)
+  if (!allLaunched || board.length === 0) return false
+  if (board.some((t) => t.speedMps > 0 || t.stopAtM === null)) return false
+  return !board.some((t) => canProgress(graph, state, t))
 }

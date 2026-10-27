@@ -47,9 +47,34 @@ export function trimEnd(points: readonly Vec2[], lengthV: number): Vec2[] {
   return []
 }
 
-/** SVG viewBox that fits the whole level. */
-export function viewBox(graph: TrackGraph): string {
-  const points = [...graph.edges.values()].flatMap((edge) => edge.polyline).map(toView)
+const edgePages = new WeakMap<TrackGraph, Map<string, number>>()
+
+/** The page of the map an edge is drawn on (1 unless the level says otherwise). */
+export function edgePage(graph: TrackGraph, edgeId: string): number {
+  let pages = edgePages.get(graph)
+  if (!pages) {
+    pages = new Map(graph.level.edges.map((e) => [e.id, e.page ?? 1]))
+    edgePages.set(graph, pages)
+  }
+  return pages.get(edgeId) ?? 1
+}
+
+/** The page a train is on: that of the edge under its tail. */
+export function trainPage(graph: TrackGraph, train: Pick<Train, 'path'>): number {
+  return edgePage(graph, train.path[0].edgeId)
+}
+
+/** The highest page number the level uses. */
+export function pageCount(graph: TrackGraph): number {
+  return Math.max(1, ...graph.level.edges.map((e) => e.page ?? 1))
+}
+
+/** SVG viewBox that fits one page of the level. */
+export function viewBox(graph: TrackGraph, page = 1): string {
+  const points = [...graph.edges.values()]
+    .filter((edge) => edgePage(graph, edge.id) === page)
+    .flatMap((edge) => edge.polyline)
+    .map(toView)
   const xs = points.map((p) => p.x)
   const ys = points.map((p) => p.y)
   const minX = Math.min(...xs) - PADDING_X
