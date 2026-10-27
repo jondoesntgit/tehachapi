@@ -3,17 +3,17 @@ import { parseClock } from '../src/engine/clock'
 import { canReach, findSteps, hasRoom, requestRoute } from '../src/engine/routing'
 import { ANNOUNCE_LEAD_S, buildTimetable, entryStep, isLevelComplete, quickestCrossingS, requiredTrains } from '../src/engine/scheduler'
 import { createInitialState, FIXED_DT_S, step } from '../src/engine/simulation'
-import { buildGraph, getEdge, locateOnPath, nextSteps } from '../src/engine/trackGraph'
+import { buildGraph, getEdge, locateOnPath, nextSteps, pathLength } from '../src/engine/trackGraph'
 import type { GameState, TrackPosition } from '../src/engine/types'
 import { graph1 as graph, level1 as level, route, runUntil } from './helpers'
 
 const EAST_EXIT = { edgeId: 'M9', offsetM: 700 }
-const WEST_EXIT = { edgeId: 'M1', offsetM: 0 }
+const BAKERSFIELD_EXIT = { edgeId: 'P2_B9', offsetM: 0 }
 const SOUTHEAST_EXIT = { edgeId: 'SE3', offsetM: getEdge(graph, 'SE3').lengthM }
 const SOUTHWEST_EXIT = { edgeId: 'SW5', offsetM: 0 }
 /** A tap that sends a train out through `terminal`. */
 const exitFor = (terminal: string) =>
-  ({ WEST: WEST_EXIT, EAST: EAST_EXIT, SOUTHEAST: SOUTHEAST_EXIT, SOUTHWEST: SOUTHWEST_EXIT })[terminal]!
+  ({ BAKERSFIELD: BAKERSFIELD_EXIT, EAST: EAST_EXIT, SOUTHEAST: SOUTHEAST_EXIT, SOUTHWEST: SOUTHWEST_EXIT })[terminal]!
 const SIDINGS = ['SIDING_A', 'SIDING_B', 'SIDING_C', 'SIDING_D']
 
 const has = (id: string) => (s: GameState) => s.trains.some((t) => t.id === id)
@@ -35,13 +35,50 @@ describe('level 1', () => {
     expect(level.startingTrains).toHaveLength(3)
   })
 
+  it('carries the line on from Marcel across page 2, in two rows, to Bakersfield', () => {
+    expect(graph.nodes.get('WEST')).toMatchObject({ kind: 'link', label: 'Marcel' })
+    expect(graph.nodes.get('BAKERSFIELD')).toMatchObject({ kind: 'terminal', label: 'Bakersfield', page: 2 })
+    // Leaving page 1 westward runs straight onto page 2's top row, and off its west end onto the lower row.
+    expect(nextSteps(graph, { edgeId: 'M1', direction: -1 })).toEqual([{ edgeId: 'P2_A1', direction: -1 }])
+    expect(nextSteps(graph, { edgeId: 'P2_A9', direction: -1 })).toEqual([{ edgeId: 'P2_B1', direction: -1 }])
+    expect(nextSteps(graph, { edgeId: 'P2_B1', direction: 1 })).toEqual([{ edgeId: 'P2_A9', direction: 1 }])
+    expect(nextSteps(graph, { edgeId: 'P2_A1', direction: 1 })).toEqual([{ edgeId: 'M1', direction: 1 }])
+    const route = findSteps(graph, { edgeId: 'M2', direction: -1 }, BAKERSFIELD_EXIT, new Set())
+    expect(route?.map((s) => s.edgeId).filter((id) => !id.startsWith('P2_'))).toEqual(['M1'])
+    expect(route?.at(-1)?.edgeId).toBe('P2_B9')
+  })
+
+  it('gives page 2 sidings half as far off the main, and double track over 30% of it', () => {
+    const offset = (id: string) => Math.max(...getEdge(graph, id).polyline.map((p, _, all) => Math.abs(p.y - all[0].y)))
+    expect(offset('SIDING_A')).toBe(60)
+    for (const id of ['P2_ASIDING_1', 'P2_ASIDING_2', 'P2_BSIDING_1', 'P2_BSIDING_2', 'P2_ADOUBLE_1', 'P2_BDOUBLE_2']) {
+      expect(offset(id)).toBe(30)
+      expect(hasRoom(graph, { edgeId: id, direction: 1 })).toBe(true)
+    }
+    // The main along both rows, against the stretches with a second track beside it.
+    const mainM = 2 * 6000
+    const doubleM = (2 * (4000 - 2200 + 3800 - 2000)) / 2
+    expect(doubleM / mainM).toBeCloseTo(0.3)
+    // A V of crossovers in the middle lets a train change tracks either way.
+    expect(nextSteps(graph, { edgeId: 'P2_A4', direction: -1 }).map((s) => s.edgeId).sort()).toEqual(['P2_A5', 'P2_ACROSS_E'])
+    expect(nextSteps(graph, { edgeId: 'P2_ADOUBLE_1', direction: -1 }).map((s) => s.edgeId).sort()).toEqual(['P2_ACROSS_W', 'P2_ADOUBLE_2'])
+  })
+
+  it('gives trains to and from Bakersfield time to cross page 2 with traffic', () => {
+    for (const e of level.schedule.filter((e) => e.entry === 'BAKERSFIELD' || e.destination === 'BAKERSFIELD')) {
+      const allowedS = parseClock(e.dueAt) - parseClock(e.appearsAt)
+      const quickestS = quickestCrossingS(graph, e)
+      expect(allowedS).toBeGreaterThan(1.5 * quickestS)
+    }
+  })
+
   it('brings a train up from Southeast and lets it head west', () => {
     const t13 = level.schedule.find((e) => e.id === 'T13')!
-    expect([t13.entry, t13.destination]).toEqual(['SOUTHEAST', 'WEST'])
+    expect([t13.entry, t13.destination]).toEqual(['SOUTHEAST', 'BAKERSFIELD'])
     // T13 alone on the board.
     const alone = buildGraph({ ...level, schedule: [t13], startingTrains: [], workTrains: false })
     const at = runUntil(alone, createInitialState(alone), (s) => s.trains.some((t) => t.id === 'T13'))
-    const routed = route(alone, at, 'T13', WEST_EXIT)
+    const routed = route(alone, at, 'T13', BAKERSFIELD_EXIT)
     const path = routed.trains.find((t) => t.id === 'T13')!.path.map((s) => s.edgeId)
     expect(path.slice(path.indexOf('SE1'), path.indexOf('SE1') + 3)).toEqual(['SE1', 'SPUR_W', 'M5'])
   })
@@ -98,7 +135,7 @@ describe('level 1', () => {
   })
 
   it('never stops a train on a wye leg or a short block at the wye', () => {
-    let state = route(graph, createInitialState(graph), 'L3', WEST_EXIT)
+    let state = route(graph, createInitialState(graph), 'L3', BAKERSFIELD_EXIT)
     state = runUntil(graph, state, has('T1'))
     // A tap on the 200 m block east of the wye runs T1 on to the next block it fits in.
     state = routeWhenClear(state, 'T1', { edgeId: 'M5', offsetM: 100 })
@@ -153,7 +190,7 @@ describe('level 1', () => {
   })
 
   it('sends three waves of four trains, one from each terminal, each to a terminal it can reach', () => {
-    const terminals = ['EAST', 'SOUTHEAST', 'SOUTHWEST', 'WEST']
+    const terminals = ['BAKERSFIELD', 'EAST', 'SOUTHEAST', 'SOUTHWEST']
     const waves = [['10:27', '10:30'], ['10:45', '10:47'], ['11:27', '11:38']]
     for (const [i, window] of waves.entries()) {
       const wave = level.schedule.filter((e) => Number(e.id.slice(1)) >= 19 + 4 * i && Number(e.id.slice(1)) < 23 + 4 * i)
@@ -342,10 +379,10 @@ describe('level 1', () => {
     expect(seen.T11.size).toBeGreaterThan(50)
   })
 
-  it('sends two trains, entering from the west, to the SE-Terminal', () => {
+  it('sends trains to the SE-Terminal, three of them up from Bakersfield', () => {
     const south = level.schedule.filter((e) => e.destination === 'SOUTHEAST')
     expect(south.map((e) => [e.id, e.entry])).toEqual([
-      ['T10', 'WEST'], ['T11', 'WEST'], ['T17', 'SOUTHWEST'], ['T22', 'SOUTHWEST'], ['T23', 'WEST'], ['T28', 'EAST'],
+      ['T10', 'BAKERSFIELD'], ['T11', 'BAKERSFIELD'], ['T17', 'SOUTHWEST'], ['T22', 'SOUTHWEST'], ['T23', 'BAKERSFIELD'], ['T28', 'EAST'],
     ])
     expect(graph.nodes.get('SOUTHEAST')?.color).toBeDefined()
   })
@@ -423,10 +460,9 @@ describe('level 1', () => {
     expect(after.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(state.timetable.T1.dueAtS)
   })
 
-  it('plays the written timetable through on time with meets in sidings C and D', () => {
-    // The dispatched timetable alone: this fixed script can't steer round a work train in its way.
-    // The three waves of four (T19–T30) all land together, and trains brought forward to keep four
-    // in play would scramble the order, so this fixed script leaves both out.
+  it('plays the written timetable through on time, hopping trains from one passing track to the next', () => {
+    // The dispatched timetable alone: no work trains, nobody brought forward, and the three waves of
+    // four (T19–T30), which all land together, left out.
     const graph = buildGraph({
       ...level,
       workTrains: false,
@@ -434,76 +470,53 @@ describe('level 1', () => {
       minTrainsRampEveryMin: undefined,
       schedule: level.schedule.filter((e) => Number(e.id.slice(1)) < 19),
     })
-    const routeWhenClear = (state: GameState, trainId: string, target: TrackPosition) =>
-      route(graph, runUntil(graph, state, (s) => requestRoute(graph, s, trainId, target).ok), trainId, target)
+    // Passing tracks: sidings and the main beside them, and both tracks of page 2's double track.
+    const pairOf = (e: { from: string; to: string }) => [e.from, e.to].sort().join('|')
+    const pairs = new Map<string, number>()
+    for (const e of graph.edges.values()) pairs.set(pairOf(e), (pairs.get(pairOf(e)) ?? 0) + 1)
+    const passing = [...graph.edges.values()]
+      .filter((e) => pairs.get(pairOf(e))! > 1 || /DOUBLE|^P2_A4$|^P2_A6$|^P2_B4$|^P2_B6$/.test(e.id))
+      .map((e) => e.id)
+    expect(passing.filter((id) => id.startsWith('P2_'))).toHaveLength(16)
+
+    // Like a player: every few seconds each stopped train goes on to the nearest passing track ahead
+    // it can have, or straight out if that is nearer, so opposing trains meet in passing tracks.
     let state = createInitialState(graph)
+    const parkedIn = new Set<string>()
+    for (let i = 0; i < (4 * 3600) / FIXED_DT_S && !isLevelComplete(state); i++) {
+      state = step(graph, state, FIXED_DT_S)
+      if (i % 50 !== 0) continue
+      for (const train of state.trains.filter((t) => t.speedMps === 0)) {
+        const now = pathLength(graph, train.path)
+        const lengthAfter = (s: GameState) => pathLength(graph, s.trains.find((t) => t.id === train.id)!.path)
+        const options = [exitFor(train.destination), ...passing.flatMap((edgeId) => [
+          { edgeId, offsetM: 0 },
+          { edgeId, offsetM: getEdge(graph, edgeId).lengthM },
+        ])]
+        let best: { state: GameState; lengthM: number } | null = null
+        for (const target of options) {
+          const result = requestRoute(graph, state, train.id, target)
+          if (!result.ok) continue
+          const lengthM = lengthAfter(result.state)
+          if (lengthM > now + 1 && (!best || lengthM < best.lengthM)) best = { state: result.state, lengthM }
+        }
+        if (best) {
+          state = best.state
+          const parkedOn = state.trains.find((t) => t.id === train.id)!
+          if (parkedOn.stopAtM !== null) parkedIn.add(parkedOn.path.at(-1)!.edgeId)
+        }
+      }
+    }
 
-    // The locals head home: L1 from siding A and L3 from siding B go west, L2 from siding D east.
-    state = route(graph, state, 'L1', WEST_EXIT)
-    state = route(graph, state, 'L2', EAST_EXIT)
-    state = routeWhenClear(state, 'L3', WEST_EXIT)
-    state = runUntil(graph, state, has('T1'))
-    state = routeWhenClear(state, 'T1', EAST_EXIT)
-
-    // T2 waits in siding C while express T3 runs through, then heads west.
-    state = runUntil(graph, state, has('T2'))
-    state = routeWhenClear(state, 'T2', { edgeId: 'SIDING_C', offsetM: 0 })
-    state = runUntil(graph, state, has('T3'))
-    state = routeWhenClear(state, 'T3', EAST_EXIT)
-    state = routeWhenClear(state, 'T2', WEST_EXIT)
-
-    // T10 enters behind T2 and turns off down the South spur.
-    state = runUntil(graph, state, has('T10'))
-    state = routeWhenClear(state, 'T10', SOUTHEAST_EXIT)
-
-    // In the lull: T16 runs east to west; T17 crosses from SW Terminal to the SE-Terminal; T18 crosses back.
-    state = runUntil(graph, state, has('T16'))
-    state = routeWhenClear(state, 'T16', WEST_EXIT)
-    state = runUntil(graph, state, has('T17'))
-    state = routeWhenClear(state, 'T17', SOUTHEAST_EXIT)
-    // T12 is listed first, so it comes up from the SE-Terminal ahead of T18 and heads east.
-    state = runUntil(graph, state, has('T12'))
-    state = routeWhenClear(state, 'T12', EAST_EXIT)
-    state = runUntil(graph, state, has('T18'))
-    state = routeWhenClear(state, 'T18', SOUTHWEST_EXIT)
-
-    // Express T4 follows T2 west; local T5 waits in siding D for freight T6, then runs east.
-    state = runUntil(graph, state, has('T4'))
-    state = routeWhenClear(state, 'T4', WEST_EXIT)
-    state = runUntil(graph, state, has('T5'))
-    state = routeWhenClear(state, 'T5', { edgeId: 'SIDING_D', offsetM: 600 })
-    state = runUntil(graph, state, has('T6'))
-    state = routeWhenClear(state, 'T6', WEST_EXIT)
-    state = routeWhenClear(state, 'T5', EAST_EXIT)
-
-    // Express T7 runs west, then freight T8 east; local T9 waits off the map until T8 is out.
-    state = runUntil(graph, state, has('T7'))
-    state = routeWhenClear(state, 'T7', WEST_EXIT)
-    state = runUntil(graph, state, has('T8'))
-    state = routeWhenClear(state, 'T8', EAST_EXIT)
-    state = runUntil(graph, state, has('T9'))
-    state = routeWhenClear(state, 'T9', WEST_EXIT)
-
-    // T11 waits off the map until T9 is home, then runs down to South.
-    state = runUntil(graph, state, has('T11'))
-    state = routeWhenClear(state, 'T11', SOUTHEAST_EXIT)
-
-    // T13 comes up from South once T11 is down, and turns west up the wye's west leg.
-    state = runUntil(graph, state, has('T13'))
-    state = routeWhenClear(state, 'T13', WEST_EXIT)
-
-    // T14 comes in from the east and turns down the SW branch; T15 comes up it and heads east.
-    state = runUntil(graph, state, has('T14'))
-    state = routeWhenClear(state, 'T14', SOUTHWEST_EXIT)
-    state = runUntil(graph, state, has('T15'))
-    state = routeWhenClear(state, 'T15', EAST_EXIT)
-    state = runUntil(graph, state, isLevelComplete)
-
+    expect(isLevelComplete(state)).toBe(true)
+    expect(state.deadlocked || state.stalled).toBe(false)
     expect(state.results.map((r) => r.trainId).sort()).toEqual([
       'L1', 'L2', 'L3', 'T1', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16', 'T17', 'T18', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
     ])
     expect(state.results.every((r) => r.reachedDestination)).toBe(true)
     expect(state.results.filter((r) => r.lateMinutes > 0)).toEqual([])
     expect(state.reservations).toEqual({})
-  })
+    // Trains waited for each other on page 2's sidings and double track.
+    expect([...parkedIn].filter((id) => id.startsWith('P2_')).length).toBeGreaterThan(2)
+  }, 60_000)
 })

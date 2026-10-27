@@ -48,7 +48,7 @@ export function Hud() {
   }, [message, clearMessage])
 
   const held = [...heldAtPortal(graph, game).map((e) => e.name), ...(workTrainHeld(game) ? ['Work train'] : [])]
-  const canSkip = game.trains.every((t) => t.work || t.transit) && nextArrivalS(game) !== null
+  const canSkip = game.trains.every((t) => t.work) && nextArrivalS(game) !== null
   const complete = isLevelComplete(game)
 
   return (

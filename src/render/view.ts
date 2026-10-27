@@ -1,5 +1,5 @@
-import { getEdge, type TrackGraph } from '../engine/trackGraph'
-import type { LevelNode, Train, Vec2 } from '../engine/types'
+import { edgePolyline, getEdge, locateOnPath, offsetOnStep, type TrackGraph } from '../engine/trackGraph'
+import type { LevelNode, RouteStep, Train, Vec2 } from '../engine/types'
 
 /**
  * The line is kilometres long but sidings sit only tens of metres off the main, so the view
@@ -59,9 +59,45 @@ export function edgePage(graph: TrackGraph, edgeId: string): number {
   return pages.get(edgeId) ?? 1
 }
 
-/** The page a train is on: that of the edge under its tail. */
-export function trainPage(graph: TrackGraph, train: Pick<Train, 'path'>): number {
-  return edgePage(graph, train.path[0].edgeId)
+/** The page a train's head is on. */
+export function trainPage(graph: TrackGraph, train: Pick<Train, 'path' | 'headM'>): number {
+  return edgePage(graph, locateOnPath(graph, train.path, train.headM).edgeId)
+}
+
+/**
+ * The parts of a path between two path distances that are drawn on `page`, in view space, one
+ * polyline per unbroken run (a path through a link carries on somewhere else, usually on another page).
+ */
+export function pagePolylines(
+  graph: TrackGraph,
+  path: readonly RouteStep[],
+  fromM: number,
+  toM: number,
+  page: number,
+): Vec2[][] {
+  const runs: Vec2[][] = []
+  let current: Vec2[] | null = null
+  let startM = 0
+  for (const step of path) {
+    const edge = getEdge(graph, step.edgeId)
+    const a = Math.max(fromM - startM, 0)
+    const b = Math.min(toM - startM, edge.lengthM)
+    startM += edge.lengthM
+    // Through a link the track jumps to wherever its partner is drawn, even on the same page.
+    const enteredByLink = graph.nodes.get(step.direction === 1 ? edge.from : edge.to)?.kind === 'link'
+    if (enteredByLink) current = null
+    if (a > b || edgePage(graph, edge.id) !== page) {
+      current = null
+      continue
+    }
+    const points = edgePolyline(edge, offsetOnStep(edge, step.direction, a), offsetOnStep(edge, step.direction, b)).map(toView)
+    if (!current) {
+      current = []
+      runs.push(current)
+    }
+    current.push(...points)
+  }
+  return runs.filter((run) => run.length > 1)
 }
 
 /** The highest page number the level uses. */

@@ -75,6 +75,11 @@ body,
   stroke-width: 3;
 }
 
+/* The line carries on on the other page. */
+.portal-link {
+  stroke-dasharray: 4 4;
+}
+
 /* A branch toward a terminal, tinted with that terminal's color. */
 .track-branch {
   stroke: var(--branch-color, var(--track));

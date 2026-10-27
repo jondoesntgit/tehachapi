@@ -3,7 +3,8 @@ export interface Vec2 {
   y: number
 }
 
-export type NodeKind = 'terminal' | 'switch' | 'point'
+/** A `link` is one end of a join between pages: track runs on from its linked partner (`Level.links`). */
+export type NodeKind = 'terminal' | 'switch' | 'point' | 'link'
 
 export interface LevelNode {
   id: string
@@ -39,16 +40,6 @@ export interface MapLabel {
   color?: string
   /** Map page (default 1). */
   page?: number
-}
-
-/**
- * A train that leaves through terminal `from` carries on: it enters at terminal `to` (usually on
- * another page) and runs by itself out through `exit`. It has already been scored at `from`.
- */
-export interface Continuation {
-  from: string
-  to: string
-  exit: string
 }
 
 export interface PhysicsConfig {
@@ -116,8 +107,11 @@ export interface Level {
   sidings?: string[]
   /** Extra text on the map, e.g. naming a branch. */
   labels?: MapLabel[]
-  /** Lines that carry trains on after they leave through a terminal (see `Continuation`). */
-  continuations?: Continuation[]
+  /**
+   * Pairs of `link` nodes joined as one: a train reaching one runs straight on along the track at
+   * the other, usually on another page. Each link node has one edge.
+   */
+  links?: [string, string][]
   /**
    * Start a work train on a free siding, then send another in 10 minutes after the last one is due,
    * while scheduled trains are still to come (see `placeWorkTrainOnSiding`, `buildWorkTimetable`).
@@ -171,8 +165,6 @@ export interface Train {
   arrivedAtS: number | null
   /** A work train: sent in by the game every so often, dispatched and scored like any other. */
   work?: boolean
-  /** Carrying on after leaving through a terminal with a continuation: runs itself, isn't scored. */
-  transit?: boolean
 }
 
 export interface TrainResult {
@@ -213,8 +205,6 @@ export interface GameState {
    * nobody holds has no entry.
    */
   reservations: Record<string, string[]>
-  /** Trains that have left through a terminal with a continuation, waiting to enter its line. */
-  transitQueue: TransitEntry[]
   /** Schedule entry ids that have not entered yet, in schedule order. */
   pending: string[]
   /** Schedule entry id -> this game's times. */
@@ -235,14 +225,4 @@ export interface GameState {
   /** No train moved for the level's `idleLimitMin`; the game is over. */
   stalled: boolean
   results: TrainResult[]
-}
-
-/** A train waiting to carry on along a continuation (see `Continuation`). */
-export interface TransitEntry {
-  id: string
-  name: string
-  maxSpeedMps: number
-  destination: string
-  to: string
-  exit: string
 }

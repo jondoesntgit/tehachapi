@@ -64,7 +64,7 @@ export function Help({ onClose }: { onClose: () => void }) {
               <dt>Tap empty space</dt>
               <dd>Clear the selection.</dd>
               <dt>P1 P2</dt>
-              <dd>Switch between the two pages of the map. Page 2 carries the line on west: a train that leaves through West Terminal is scored there, then runs itself through page 2. A dot and number show how many trains are on the other page.</dd>
+              <dd>Switch between the two pages of the map. The line runs on west from Marcel onto page 2: along the top row, then from Westward along the lower row to Bakersfield. Dispatch page 2 like page 1; a selected train stays selected when you switch, so you can pick it on one page and tap where it goes on the other. A dot and number show how many trains are on the other page.</dd>
               <dt>1× 5× 10× 60×</dt>
               <dd>Game speed. Drops back to 1× whenever a train enters, unless you double-tap 5×: that holds 5× until you pick another speed.</dd>
               <dt>⏭</dt>

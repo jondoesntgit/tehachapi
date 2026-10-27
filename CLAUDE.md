@@ -14,7 +14,7 @@ Working today:
 - SVG map, tap-to-route, HUD (clock, 1×/5×/10×/60× with double-tap to hold 5×, skip to next train, route-refused messages); each train's label shows minutes until it's due.
 - Arrival countdowns: every train (work trains too) is announced beside its entry terminal 10 minutes before it enters.
 - Game codes and tournament mode: every game has a code; the same code deals the same game, so players can compare scores.
-- A second page (P1/P2 buttons): trains leaving West Terminal carry on along page 2 by themselves.
+- A second page (P1/P2 buttons): the line runs on west from Marcel across page 2, in two rows, to Bakersfield; dispatched like page 1.
 - CI and GitHub Pages deploy.
 
 Not built yet (see Roadmap):
@@ -64,7 +64,7 @@ Do NOT use React Native. Capacitor keeps one codebase that runs identically in t
 src/
   engine/            # Pure TypeScript. No React, no DOM, no wall clock.
     types.ts         # Level schema, RouteStep, Train, TrainResult, GameState
-    trackGraph.ts    # Build graph from level JSON; edge lengths; geometry and path lookups; tap snapping
+    trackGraph.ts    # Build graph from level JSON (links join pages); edge lengths; geometry and path lookups; tap snapping
     routing.ts       # findSteps (Dijkstra), requestRoute (grant/refuse, reservations)
     physics.ts       # advance(): one train, one timestep (accel, cruise, brake, exact stop)
     clock.ts         # "HH:MM" <-> seconds since midnight
@@ -72,10 +72,9 @@ src/
     following.ts     # Shared track claims (holders per edge), leader/follower positions, followLimitM
     gameCode.ts      # Game codes <-> seeds: normalizeGameCode, seedFromGameCode, randomGameCode
     scheduler.ts     # Timetable (random shifts), spawning, starting trains, scoring, level-complete check
-    transit.ts       # Continuations: queueTransit on exit, spawnTransit onto the next page, routeToTerminal
     simulation.ts    # createInitialState(graph, seed?), step(graph, state, dtS), skipToNextArrival
   render/            # React components that only READ engine state
-    view.ts          # World -> view mapping (Y_SCALE), viewBox per page, edgePage/trainPage
+    view.ts          # World -> view mapping (Y_SCALE), viewBox per page, edgePage/trainPage, pagePolylines
     TrackLayer.tsx   # <polyline> per edge; each cleared route drawn in its train's color
     TrainLayer.tsx   # Thick <polyline> per train body in its destination's color, label with minutes until due, stop marker
     ArrivalLayer.tsx # Countdowns beside each terminal for trains announced to enter there
@@ -90,9 +89,8 @@ levels/
   level-01.json      # Track layout + schedule (see format below)
 tests/               # Vitest; all tests target src/engine
   fixtures/two-sidings.json  # Frozen layout for engine unit tests (helpers.ts `graph`)
-  level-01.test.ts   # Shipped level 1 (helpers.ts `graph1`): layout, timetable, scripted playthrough
+  level-01.test.ts   # Shipped level 1 (helpers.ts `graph1`): layout, page 2, timetable, siding-hopping playthrough
   following.test.ts  # Following: safety across speeds, sharing rules, whole-game no-touch check
-  transit.test.ts    # Continuations: scored once, runs itself through page 2, ignored by idle/routing
 ```
 
 ESLint fails the build if anything under `src/engine` imports React, Zustand, the store, `render/` or `input/`, or touches `window`, `document`, `performance`, `requestAnimationFrame` or `Date.now`.
@@ -105,7 +103,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Vertical exaggeration.** The renderer draws y at `Y_SCALE` (6×), like a dispatcher's panel, because at true scale a siding sits only ~8 pt from the main on an iPhone and cannot be tapped separately. This is visual only. Tap snapping (`nearestTrackPosition`) takes the same scale.
 - **Track graph:** `nodes` (terminals, switch points) and `edges` (track segments between nodes, optional intermediate `points` for drawing). An edge's length is its polyline length unless `lengthM` overrides it.
 - **Direction and offsets:** `direction` is `1` when travelling from an edge's `from` node to `to`, `-1` for the reverse. `offsetM` on an edge is always measured from `from`.
-- **Movement through nodes:** a train may continue onto any edge that leaves the node on the far side (heading within 90° of its arrival heading). That one rule makes facing switches offer both legs and stops trains doubling back through trailing switches. **Trains cannot reverse.**
+- **Movement through nodes:** a train may continue onto any edge that leaves the node on the far side (heading within 90° of its arrival heading). At a `link` node it continues onto the edge at the node it is joined to (`Level.links`, `graph.linkedTo`), which may be drawn anywhere, usually on another page. That one rule makes facing switches offer both legs and stops trains doubling back through trailing switches. **Trains cannot reverse.**
 - **Train position:** a train stores `path` (the `RouteStep[]` from the edge under its tail to the end of its granted route) and `headM` (head distance along that path). The body is the `trainLengthM` behind the head. `locateOnPath` converts to `{ edgeId, offsetM, direction }` when needed. All trains share the same length.
 - **Stop target:** `stopAtM`, measured like `headM`. `null` means the train is leaving: it runs off the end of its path through a terminal.
 - **Routes** (`requestRoute`):
@@ -137,7 +135,7 @@ The game loop calls `requestAnimationFrame`, accumulates real time × time scale
 - **Deadlock ends the game** (`isDeadlocked`, checked at the end of every `step`): once every scheduled train's entry time has passed (held-at-portal counts as launched), and every train on the board is stopped with no way forward (`canProgress`: no free block ahead with room that still leads to its destination), `state.deadlocked` is set. `step` then returns the state unchanged, `isLevelComplete` is true, and `DEADLOCK_PENALTY_MIN` (90) is added to the late total (`lateTotal`, `levelScore`). Reservations and the exact stop still make collisions and overruns impossible.
 - **Idle limit** (`checkIdle`, at the end of every `step`; level `idleLimitMin`, 20 in level 1): `state.idleSinceS` records when every train on the board last stood still (an empty board isn't idle); once that lasts `idleLimitMin`, `state.stalled` ends the game like a deadlock but with no penalty. The end panel says why.
 - **Game codes and tournament mode** (`gameCode.ts`, `store.ts`, `render/Tournament.tsx`): every game is dealt from a code, and `seedFromGameCode(code)` is its seed, so the same code always gives the same timetable, starting sidings and work trains; only the player's dispatching differs (the fixed-step loop keeps the simulation independent of frame rate). Every entry time (`state.timetable`, `state.workTimetable`) is fixed in `createInitialState` and never changes during play, whatever the player does; a train can only be held at its portal (its entry block taken, or another work train on the board), and its due time doesn't move when it is. Keep it that way: never make an entry time depend on the board. A fresh game gets a random 6-character Crockford base-32 code (`randomGameCode`; no I, L, O or U). Typed codes are normalized (`normalizeGameCode`: upper case, letters and digits only, 1–24 long), so any word works ("Friday Final" → `FRIDAYFINAL`); the seed also folds O→0 and I/L→1 so look-alike typos deal the same game. The 🏆 panel (pauses the game) shows the code and its link, restarts it, or plays a typed code. Playing a code turns on tournament mode: the top bar shows `🏆 CODE`, "Play again" becomes "Replay CODE" (restart deals the same code), and the address bar carries `?code=CODE`; opening such a link starts that game in tournament mode. "Leave tournament" deals a new random game and drops `?code=`. Share/copy buttons appear only in a secure context (HTTPS); on plain HTTP the link is shown as selectable text. Changing a level's schedule, layout or any random draw changes what a code deals, so codes are only comparable within one build.
-- **Pages and continuations** (`transit.ts`): nodes, edges and labels may carry `page` (default 1); the store's `page` picks which one the map shows (viewBox, layers, tap routing and countdowns are all limited to it), and the HUD shows P1/P2 buttons when a level has more than one page, each with a count of trains on a page not showing. A level's `continuations` carry a terminal on to another page: a train whose tail clears `from` is scored there as usual, then queued (`state.transitQueue`) and, once the first block from `to` is free, enters at `to` at its top speed as a `transit` train under the same id, running itself to `exit` (following a transit train ahead). Transit trains have no due time on the map, can't be routed (`departing`), and don't count for scoring, level-complete, deadlock, idle, fast-forward or ⏭ (which clears them). Level 1: West Terminal carries on to page 2 (`P2_EAST` → `P2_WEST`). Work trains only use page-1 terminals.
+- **Pages and links:** nodes, edges and labels may carry `page` (default 1); the store's `page` picks which one the map shows (viewBox, layers, tap routing and countdowns are all limited to it), and the HUD shows P1/P2 buttons when a level has more than one page, each with a count of trains whose head is on a page not showing. A level's `links` join pairs of `link` nodes (each with exactly one edge) into continuous track, so routing, reservations, following and physics run across pages unchanged. The renderer draws only the part of a path or body on the current page (`pagePolylines`, which also breaks a line at every link), with a dashed end bar at each link. Switching page keeps the selection, so a train picked on one page can be sent to track on the other. Level 1: Marcel (page 1's west end, node `WEST`) joins the east end of page 2's top row; its west end, Westward, joins the east end of the lower row, which ends at Bakersfield. Page 2 has two sidings per row at half page 1's offset (30 m, not 60 m) and a double-track stretch per row (30% of its 12 km main) with a V of crossovers in the middle. Trains to or from Bakersfield are due `2 × 12 km ÷ top speed + 5 min` later than they were at the old West Terminal.
 - **Fast-forward:** the store drops back to 1× whenever a train enters, unless the speed is held (`speedLocked`: a double tap on 5× in the HUD; cleared by picking any speed). "Skip to next train" only works while no dispatched train is on the board.
 
 ## Level file format (`levels/*.json`)
@@ -151,20 +149,20 @@ See `levels/level-01.json`. Key fields:
 - `idleLimitMin` (optional) — end the game if trains are on the board but none has moved for this many minutes.
 - `appearsJitterMin` (optional) — max random shift, in minutes either way, applied to each scheduled train per game.
 - `trainLengthM`, `physics.accelMps2`, `physics.decelMps2`, `physics.stopMarginM`.
-- `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point", label?, color?, page? }`. A terminal's `color` is the color of trains heading there (map, train list, help legend).
+- `nodes[]`: `{ id, x, y, kind: "terminal" | "switch" | "point" | "link", label?, color?, page? }`. A terminal's `color` is the color of trains heading there (map, train list, help legend).
 - `edges[]`: `{ id, from, to, points?: [[x,y],...], lengthM?, branch?, page? }`. `page` (default 1) puts it on another page of the map. `branch` names a terminal; the edge is drawn in a faint tint of its color.
-- `continuations[]` (optional): `{ from, to, exit }` — terminals; a train leaving through `from` reappears at `to` on its page and runs itself out through `exit`.
+- `links[]` (optional): `[nodeId, nodeId]` pairs of `link` nodes; track runs straight on from one to the other (e.g. from one page onto the next).
 - `labels[]` (optional): `{ text, x, y, color?, page? }` — extra text on the map at a world position.
 - `schedule[]`: `{ id, name, appearsAt, appearsBetween?: ["HH:MM", "HH:MM"], entry: <terminal node id>, maxSpeedMps, destination: <terminal node id>, dueAt }`. `appearsAt`/`dueAt` are the written timetable; `appearsBetween` (which must contain `appearsAt`) randomizes the appearance over that window each game.
 - `startingTrains[]` (optional): `{ id, name, edge, edgeChoices?: [edge ids], direction: 1 | -1, maxSpeedMps, destination: <terminal node id>, dueAt }` — trains standing on `edge` at the start, facing `direction`. `edgeChoices` (which must contain `edge`) picks a random free one each game.
 
-`buildGraph` throws on duplicate ids, edges that reference unknown nodes, schedule entries whose `entry` or `destination` is not a terminal or whose `appearsBetween` does not contain `appearsAt`, and starting trains with an unknown edge (or edge choice), `edgeChoices` that do not contain `edge`, or a non-terminal destination. `createInitialState` throws if a starting train does not fit its edge, two share one, or a train's edge choices are all taken. The level is currently imported statically in `store.ts`.
+`buildGraph` throws on duplicate ids, edges that reference unknown nodes, schedule entries whose `entry` or `destination` is not a terminal or whose `appearsBetween` does not contain `appearsAt`, and starting trains with an unknown edge (or edge choice), `edgeChoices` that do not contain `edge`, or a non-terminal destination, and links that name a non-link node, a link node that is unjoined or joined twice, or one without exactly one edge. `createInitialState` throws if a starting train does not fit its edge, two share one, or a train's edge choices are all taken. The level is currently imported statically in `store.ts`.
 
 ## Conventions
 
 - East = +x. "Eastbound" trains enter at the west terminal.
 - Keep engine functions pure (state in, new state out) and add a Vitest test with every engine change.
-- `tests/level-01.test.ts` contains a scripted full playthrough of level 1 on its written timetable, with work trains off, `minTrainsOnBoard` and its ramp off, and the three four-train waves (T19–T30) left out. Another test checks that every random timetable forces at least three pairs of trains to pass each other. Keep it passing; update it when level 1 changes.
+- `tests/level-01.test.ts` plays level 1 through on its written timetable with a simple dispatcher that sends each stopped train on to the nearest passing track it can have (or out), with work trains off, `minTrainsOnBoard` and its ramp off, and the three four-train waves (T19–T30) left out; every train must be on time. Another test checks that every random timetable forces at least three pairs of trains to pass each other. Keep it passing; update it when level 1 changes.
 - Engine unit tests use the frozen fixture layout, so retuning a real level doesn't break them.
 - iPhone first: landscape, touch targets ≥ 44 pt, no hover-only UI, respect safe-area insets.
 - Stroke widths are in screen pixels (`vector-effect: non-scaling-stroke`); map label sizes are in view units.
@@ -180,7 +178,7 @@ Done:
 6. Level 1: four sidings, a wye to an SE line running under the main to the east (two passing sidings), a SW branch running under the main to the west (two passing sidings), both tinted and labelled; thirty-three trains (including three waves of four, one from each terminal, at 10:27–10:30, 10:45–10:47 and 11:27–11:38; three waiting at the start on random sidings), a rising minimum of scheduled trains in play (4, plus one every 15 minutes), at least three forced passes every game, scoring out of 100, dispatchable work trains at 11.25 mph (one starting on a siding, then one 10 minutes after each is due; one at a time), randomized entry times, trains colored by destination (work trains too), 10-minute arrival countdowns beside each terminal.
 7. Game codes and tournament mode: shareable codes/links that deal the same game for everyone, replayable from the 🏆 panel.
 8. Following: trains heading the same way may share track, keeping 20 m behind the leader (moving stop target), following it out through its terminal, parking only in a block behind it.
-9. Second page: P1/P2 buttons; trains leaving West Terminal run on along page 2.
+9. Second page: P1/P2 buttons; the line runs on from Marcel across page 2 (two rows, sidings, 30% double track) to Bakersfield, dispatched like page 1.
 
 Next:
 10. Per-train end-of-level score breakdown (deadlock detection and the score are done).

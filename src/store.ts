@@ -141,7 +141,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // A train entering is the dispatcher's cue to act, so drop out of fast-forward.
     const newTrains = next.trains.filter((t) => !game.trains.some((g) => g.id === t.id))
     // Work trains don't need the dispatcher, so they don't end fast-forward.
-    const entered = newTrains.some((t) => !t.work && !t.transit)
+    const entered = newTrains.some((t) => !t.work)
     const entryCounts = { ...get().entryCounts }
     for (const train of newTrains) {
       const first = graph.edges.get(train.path[0].edgeId)!
@@ -182,8 +182,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   setHelpOpen: (helpOpen) => set({ helpOpen }),
 
-  // Changing page drops the selection: a train on the other page can't be routed from here.
-  setPage: (page) => set({ page, selectedTrainId: null }),
+  // The selection is kept, so a train can be picked on one page and sent somewhere on the other.
+  setPage: (page) => set({ page }),
 
   restart: () => {
     const { tournament, gameCode } = get()

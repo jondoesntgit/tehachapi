@@ -14,7 +14,6 @@ import {
   spawnWorkTrain,
 } from './scheduler'
 import { getEdge, pathLength, stepEndNode, type TrackGraph } from './trackGraph'
-import { queueTransit, spawnTransit } from './transit'
 import type { GameState, Train } from './types'
 
 /** Timestep the game loop feeds to `step`, in game seconds. */
@@ -39,7 +38,6 @@ export function createInitialState(graph: TrackGraph, seed?: number): GameState 
     deadlocked: false,
     idleSinceS: null,
     stalled: false,
-    transitQueue: [],
     results: [],
   }
 }
@@ -51,7 +49,6 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
   const timeS = state.timeS + dtS
   let reservations = state.reservations
   const results = [...state.results]
-  let transitQueue = state.transitQueue
   const trains: Train[] = []
   // Every follower's limit from where its leader is before anyone moves: leaders only move forward,
   // so this errs on the safe side and the gap never shrinks below FOLLOW_GAP_M.
@@ -82,9 +79,7 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
         reservations = releaseAll(reservations, train.id)
         const last = path[path.length - 1]
         const exitedAt = stepEndNode(getEdge(graph, last.edgeId), last.direction)
-        // A train carrying on along a continuation was scored when it first left.
-        if (!train.transit) results.push(scoreArrival(train, arrivedAtS, exitedAt))
-        transitQueue = queueTransit(graph, train, exitedAt, transitQueue)
+        results.push(scoreArrival(train, arrivedAtS, exitedAt))
         continue
       }
     }
@@ -102,10 +97,7 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
     trains.push({ ...train, speedMps: moved.speedMps, path, headM, stopAtM, arrivedAtS })
   }
 
-  const next = spawnTransit(
-    graph,
-    spawnWorkTrain(graph, spawnDue(graph, { ...state, timeS, trains, reservations, results, transitQueue })),
-  )
+  const next = spawnWorkTrain(graph, spawnDue(graph, { ...state, timeS, trains, reservations, results }))
   if (isDeadlocked(graph, next)) return { ...next, deadlocked: true }
   return checkIdle(graph, next)
 }
@@ -117,9 +109,9 @@ export function step(graph: TrackGraph, state: GameState, dtS: number): GameStat
  */
 export function skipToNextArrival(state: GameState, leadS = 10): GameState {
   const nextS = nextArrivalS(state)
-  if (state.trains.some((t) => !t.work && !t.transit) || nextS === null) return state
+  if (state.trains.some((t) => !t.work) || nextS === null) return state
   const reservations = state.trains.reduce((acc, t) => releaseAll(acc, t.id), state.reservations)
-  return { ...state, trains: [], transitQueue: [], reservations, timeS: Math.max(state.timeS, nextS - leadS) }
+  return { ...state, trains: [], reservations, timeS: Math.max(state.timeS, nextS - leadS) }
 }
 
 /**
@@ -129,8 +121,7 @@ export function skipToNextArrival(state: GameState, leadS = 10): GameState {
 export function checkIdle(graph: TrackGraph, state: GameState): GameState {
   const limitMin = graph.level.idleLimitMin
   if (limitMin === undefined) return state
-  // Trains carrying on along a continuation run themselves; they don't count either way.
-  const board = state.trains.filter((t) => !t.transit)
+  const board = state.trains
   const allStill = board.length > 0 && board.every((t) => t.speedMps === 0)
   if (!allStill) return state.idleSinceS === null ? state : { ...state, idleSinceS: null }
   const idleSinceS = state.idleSinceS ?? state.timeS

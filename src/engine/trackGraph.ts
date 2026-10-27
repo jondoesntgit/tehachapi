@@ -19,6 +19,8 @@ export interface TrackGraph {
   edges: ReadonlyMap<string, GraphEdge>
   /** node id -> ids of the edges touching it. */
   edgesAt: ReadonlyMap<string, readonly string[]>
+  /** link node id -> the link node it is joined to (`Level.links`), both ways. */
+  linkedTo: ReadonlyMap<string, string>
 }
 
 export function buildGraph(level: Level): TrackGraph {
@@ -89,13 +91,22 @@ export function buildGraph(level: Level): TrackGraph {
     }
   }
 
-  for (const c of level.continuations ?? []) {
-    for (const id of [c.from, c.to, c.exit]) {
-      if (nodes.get(id)?.kind !== 'terminal') throw new Error(`Continuation from "${c.from}" references "${id}", which is not a terminal`)
+  const linkedTo = new Map<string, string>()
+  for (const [a, b] of level.links ?? []) {
+    for (const id of [a, b]) {
+      if (nodes.get(id)?.kind !== 'link') throw new Error(`Link "${a}"–"${b}" references "${id}", which is not a link node`)
+      if (linkedTo.has(id)) throw new Error(`Link node "${id}" is joined twice`)
+      if (edgesAt.get(id)!.length !== 1) throw new Error(`Link node "${id}" must have exactly one edge`)
     }
+    if (a === b) throw new Error(`Link node "${a}" is joined to itself`)
+    linkedTo.set(a, b)
+    linkedTo.set(b, a)
+  }
+  for (const node of nodes.values()) {
+    if (node.kind === 'link' && !linkedTo.has(node.id)) throw new Error(`Link node "${node.id}" is not joined to another`)
   }
 
-  return { level, nodes, edges, edgesAt }
+  return { level, nodes, edges, edgesAt, linkedTo }
 }
 
 export function getEdge(graph: TrackGraph, edgeId: string): GraphEdge {
@@ -190,10 +201,13 @@ export function nextSteps(graph: TrackGraph, step: RouteStep): RouteStep[] {
   const nodeId = stepEndNode(edge, step.direction)
   const arriving = heading(edge, step.direction, 'end')
   const result: RouteStep[] = []
-  for (const nextId of graph.edgesAt.get(nodeId) ?? []) {
+  // At a link the track carries on from its partner node, which may be drawn somewhere else entirely.
+  const linked = graph.linkedTo.get(nodeId)
+  const at = linked ?? nodeId
+  for (const nextId of graph.edgesAt.get(at) ?? []) {
     if (nextId === edge.id) continue
     const next = getEdge(graph, nextId)
-    const direction: Direction = next.from === nodeId ? 1 : -1
+    const direction: Direction = next.from === at ? 1 : -1
     const leaving = heading(next, direction, 'start')
     if (arriving.x * leaving.x + arriving.y * leaving.y > 0) result.push({ edgeId: nextId, direction })
   }

@@ -79,3 +79,39 @@ describe('trackGraph', () => {
     expect(nearestTrackPosition(graph, { x: 1600, y: -100 }, 6)!.edgeId).toBe('M2')
   })
 })
+
+describe('links between pages', () => {
+  // The fixture's West terminal becomes a link onto a second page, whose line ends at FAR.
+  const linked = {
+    ...level,
+    nodes: [
+      ...level.nodes.map((n) => (n.id === 'WEST' ? { ...n, kind: 'link' as const } : n)),
+      { id: 'P2_E', x: 3000, y: 0, kind: 'link' as const, page: 2 },
+      { id: 'FAR', x: 0, y: 0, kind: 'terminal' as const, page: 2 },
+    ],
+    edges: [...level.edges, { id: 'P2', from: 'FAR', to: 'P2_E', page: 2 }],
+    links: [['WEST', 'P2_E']] as [string, string][],
+    schedule: level.schedule.map((e) => ({
+      ...e,
+      entry: e.entry === 'WEST' ? 'FAR' : e.entry,
+      destination: e.destination === 'WEST' ? 'FAR' : e.destination,
+    })),
+    startingTrains: level.startingTrains!.map((t) => ({ ...t, destination: t.destination === 'WEST' ? 'FAR' : t.destination })),
+  }
+
+  it('runs straight on through a link, both ways, though its ends are drawn apart', () => {
+    const g = buildGraph(linked)
+    expect(nextSteps(g, { edgeId: 'M1', direction: -1 })).toEqual([{ edgeId: 'P2', direction: -1 }])
+    expect(nextSteps(g, { edgeId: 'P2', direction: 1 })).toEqual([{ edgeId: 'M1', direction: 1 }])
+    // The link is no end of the line: nothing stops there.
+    expect(nextSteps(g, { edgeId: 'P2', direction: -1 })).toEqual([])
+  })
+
+  it('rejects links that are not link nodes, unjoined link nodes, and links with more than one edge', () => {
+    expect(() => buildGraph({ ...linked, links: [['WEST', 'FAR']] })).toThrow(/not a link node/)
+    expect(() => buildGraph({ ...linked, links: [] })).toThrow(/not joined/)
+    expect(() =>
+      buildGraph({ ...linked, edges: [...linked.edges, { id: 'X', from: 'WEST', to: 'SW_A2' }] }),
+    ).toThrow(/exactly one edge/)
+  })
+})

@@ -1,7 +1,7 @@
 import { useCallback, type MouseEvent } from 'react'
-import { distance, distanceToPolyline, getEdge, nearestTrackPosition, pathPolyline } from '../engine/trackGraph'
+import { distance, distanceToPolyline, getEdge, nearestTrackPosition } from '../engine/trackGraph'
 import type { TrackPosition, Vec2 } from '../engine/types'
-import { edgePage, toView, trainPage, Y_SCALE } from '../render/view'
+import { edgePage, pagePolylines, toView, Y_SCALE } from '../render/view'
 import { useGameStore } from '../store'
 
 /** Half of a 44 pt touch target. */
@@ -23,9 +23,9 @@ export function useTapRouting() {
 
     let tapped: { id: string; d: number } | null = null
     for (const train of game.trains) {
-      if (trainPage(graph, train) !== page) continue
-      const body = pathPolyline(graph, train.path, train.headM - graph.level.trainLengthM, train.headM)
-      const d = distanceToPolyline(tap, body.map(toView))
+      const runs = pagePolylines(graph, train.path, train.headM - graph.level.trainLengthM, train.headM, page)
+      if (runs.length === 0) continue
+      const d = Math.min(...runs.map((run) => distanceToPolyline(tap, run)))
       if (d <= TAP_RADIUS_PX * unitsPerPx && (!tapped || d < tapped.d)) tapped = { id: train.id, d }
     }
     if (tapped) {

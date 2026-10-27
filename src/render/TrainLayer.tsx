@@ -1,8 +1,8 @@
-import { locateOnPath, getEdge, pathPolyline, pointAt } from '../engine/trackGraph'
+import { locateOnPath, getEdge, pointAt } from '../engine/trackGraph'
 import { WORK_TRAIN_LABEL } from '../engine/scheduler'
 import { useGameStore } from '../store'
 import type { CSSProperties } from 'react'
-import { LABEL_SIZE, pointsAttr, toView, trainColor, trainPage } from './view'
+import { edgePage, LABEL_SIZE, pagePolylines, toView, trainColor, viewPointsAttr } from './view'
 
 /** Minutes until a train is due at its destination, or how late it already is. */
 function dueIn(dueAtS: number, timeS: number): string {
@@ -20,25 +20,28 @@ export function TrainLayer() {
 
   return (
     <g>
-      {trains.filter((train) => trainPage(graph, train) === page).map((train) => {
+      {trains.map((train) => {
         const selected = train.id === selectedTrainId
-        const body = pathPolyline(graph, train.path, train.headM - trainLengthM, train.headM)
-        const head = toView(body[body.length - 1])
+        // Only the part of the body on this page; a train crossing a link shows on both.
+        const runs = pagePolylines(graph, train.path, train.headM - trainLengthM, train.headM, page)
+        if (runs.length === 0) return null
+        const front = runs[runs.length - 1]
+        const head = front[front.length - 1]
         const stop = selected && train.stopAtM !== null ? locateOnPath(graph, train.path, train.stopAtM) : null
-        const stopAt = stop && toView(pointAt(getEdge(graph, stop.edgeId), stop.offsetM))
+        const stopAt = stop && edgePage(graph, stop.edgeId) === page && toView(pointAt(getEdge(graph, stop.edgeId), stop.offsetM))
         return (
           <g key={train.id}>
             {stopAt && <circle className="stop-marker" cx={stopAt.x} cy={stopAt.y} r={45} />}
-            <polyline
-              className={selected ? 'train train-selected' : 'train'}
-              style={{ '--train-color': trainColor(graph, train) } as CSSProperties}
-              points={pointsAttr(body)}
-            />
+            {runs.map((run, i) => (
+              <polyline
+                key={i}
+                className={selected ? 'train train-selected' : 'train'}
+                style={{ '--train-color': trainColor(graph, train) } as CSSProperties}
+                points={viewPointsAttr(run)}
+              />
+            ))}
             <text className="label train-label" x={head.x} y={head.y - 90} fontSize={LABEL_SIZE} textAnchor="middle">
-              {/* A train carrying on past its terminal has already been scored: no countdown. */}
-              {train.transit
-                ? train.id
-                : `${train.work ? WORK_TRAIN_LABEL : train.id} · ${dueIn(train.dueAtS, timeS)}`}
+              {`${train.work ? WORK_TRAIN_LABEL : train.id} · ${dueIn(train.dueAtS, timeS)}`}
             </text>
           </g>
         )

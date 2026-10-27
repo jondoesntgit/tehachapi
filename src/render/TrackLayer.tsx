@@ -1,8 +1,8 @@
 import { followLimitM } from '../engine/following'
-import { pathLength, pathPolyline } from '../engine/trackGraph'
+import { pathLength } from '../engine/trackGraph'
 import type { CSSProperties } from 'react'
 import { useGameStore } from '../store'
-import { edgePage, LABEL_SIZE, outward, pointsAttr, PX_PER_MM, toView, trainColor, trainPage, trimEnd, viewPointsAttr } from './view'
+import { edgePage, LABEL_SIZE, outward, pagePolylines, pointsAttr, PX_PER_MM, toView, trainColor, trimEnd, viewPointsAttr } from './view'
 
 /** Clear screen space between the ends of two trains' routes, so they never touch. */
 const ROUTE_GAP_MM = 1
@@ -31,28 +31,29 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
           points={pointsAttr(edge.polyline)}
         />
       ))}
-      {trains.filter((train) => trainPage(graph, train) === page).map((train) => {
+      {trains.flatMap((train) => {
         // A train reserves exactly the edges of its path, so its route is the whole path; a follower's
         // is drawn only up to the train it follows, so shared track shows the leader's color.
         const endM = Math.min(pathLength(graph, train.path), followLimitM(graph, trains, train) ?? Infinity)
-        const route = pathPolyline(graph, train.path, 0, endM).map(toView)
-        // Trim the front, then (reversed) the rear.
-        const trimmed = trimEnd(trimEnd(route, trimV).reverse(), trimV)
-        return (
-          trimmed.length > 1 && (
-            <polyline
-              key={train.id}
-              className="track track-reserved"
-              // The cleared route is drawn in the train's own color.
-              style={{ '--route-color': trainColor(graph, train) } as CSSProperties}
-              points={viewPointsAttr(trimmed)}
-            />
+        return pagePolylines(graph, train.path, 0, endM, page).map((route, i) => {
+          // Trim the front, then (reversed) the rear.
+          const trimmed = trimEnd(trimEnd(route, trimV).reverse(), trimV)
+          return (
+            trimmed.length > 1 && (
+              <polyline
+                key={`${train.id}-${i}`}
+                className="track track-reserved"
+                // The cleared route is drawn in the train's own color.
+                style={{ '--route-color': trainColor(graph, train) } as CSSProperties}
+                points={viewPointsAttr(trimmed)}
+              />
+            )
           )
-        )
+        })
       })}
       {[...graph.nodes.values()].filter((node) => (node.page ?? 1) === page).map((node) => {
         const p = toView(node)
-        if (node.kind !== 'terminal') {
+        if (node.kind !== 'terminal' && node.kind !== 'link') {
           return node.kind === 'switch' ? <circle key={node.id} className="switch" cx={p.x} cy={p.y} r={30} /> : null
         }
         // The bar crosses the track. The label sits under the bar, or past the end of a track that runs down.
@@ -64,7 +65,8 @@ export function TrackLayer({ unitsPerPx }: { unitsPerPx: number }) {
             <line
               // A new key each time a train enters here restarts the pulse animation.
               key={entryCounts[node.id] ?? 0}
-              className={entryCounts[node.id] ? 'portal portal-entered' : 'portal'}
+              // A link's bar is dashed: the track carries on on the other page.
+              className={node.kind === 'link' ? 'portal portal-link' : entryCounts[node.id] ? 'portal portal-entered' : 'portal'}
               x1={p.x - out.y * PORTAL_HALF}
               y1={p.y + out.x * PORTAL_HALF}
               x2={p.x + out.y * PORTAL_HALF}
