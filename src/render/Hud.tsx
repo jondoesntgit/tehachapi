@@ -5,6 +5,7 @@ import {
   heldAtPortal,
   isLevelComplete,
   workTrainHeld,
+  earlyTotal,
   lateTotal,
   levelScore,
   nextArrivalS,
@@ -63,6 +64,10 @@ export function Hud() {
           )}
         </div>
         <div className="buttons">
+          {/* The score so far: 100, less minutes late, plus minutes early. */}
+          <div className="running-score" aria-label="Score">
+            {levelScore(game)}
+          </div>
           {pageCount(graph) > 1 &&
             // Highest page first: P2 sits left of P1.
             Array.from({ length: pageCount(graph) }, (_, i) => pageCount(graph) - i).map((p) => {
@@ -117,7 +122,8 @@ export function Hud() {
           </p>
           <p className="hint">
             100, less {lateTotal(game)} minutes late in all
-            {game.deadlocked && ` (including ${DEADLOCK_PENALTY_MIN} for the deadlock)`}
+            {game.deadlocked && ` (including ${DEADLOCK_PENALTY_MIN} for the deadlock)`}, plus {earlyTotal(game)} minutes
+            early
           </p>
           <p className="hint">
             {tournament ? 'Tournament' : 'Game'} code <b className="code-inline">{gameCode}</b>

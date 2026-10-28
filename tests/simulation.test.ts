@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
-import { announcedTrains, ANNOUNCE_LEAD_S, entryStep, heldAtPortal, isLevelComplete, lateTotal, levelScore, workTrainHeld } from '../src/engine/scheduler'
+import { announcedTrains, ANNOUNCE_LEAD_S, earlyTotal, entryStep, heldAtPortal, isLevelComplete, lateTotal, levelScore, workTrainHeld } from '../src/engine/scheduler'
 import { canReach, isDeadlocked, requestRoute } from '../src/engine/routing'
 import { createInitialState, skipToNextArrival, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, type TrackGraph } from '../src/engine/trackGraph'
@@ -106,6 +106,9 @@ describe('simulation', () => {
       lateMinutes: 0,
     })
     expect(state.results[1].arrivedAtS).toBeLessThan(parseClock('10:50'))
+    // Early by whole minutes, rounded down.
+    expect(state.results[1].earlyMinutes).toBe(Math.floor((parseClock('10:50') - state.results[1].arrivedAtS) / 60))
+    expect(state.results[1].earlyMinutes).toBeGreaterThan(0)
   })
 
   it('scores lateness in whole minutes', () => {
@@ -354,13 +357,18 @@ describe('work train announcements', () => {
 })
 
 describe('levelScore', () => {
-  const result = (lateMinutes: number) => ({
-    trainId: 'X', name: 'X', arrivedAtS: 0, dueAtS: 0, lateMinutes, exitedAt: 'EAST', reachedDestination: true,
+  const result = (lateMinutes: number, earlyMinutes = 0) => ({
+    trainId: 'X', name: 'X', arrivedAtS: 0, dueAtS: 0, lateMinutes, earlyMinutes, exitedAt: 'EAST', reachedDestination: true,
   })
 
   it('is 100 less every minute trains were late', () => {
     expect(levelScore({ results: [], deadlocked: false })).toBe(100)
     expect(levelScore({ results: [result(0), result(4), result(7)], deadlocked: false })).toBe(89)
+  })
+
+  it('adds a point for every minute a train arrived early', () => {
+    expect(earlyTotal({ results: [result(0, 3), result(4), result(0, 6)] })).toBe(9)
+    expect(levelScore({ results: [result(0, 3), result(4), result(0, 6)], deadlocked: false })).toBe(105)
   })
 
   it('adds 90 minutes to the late total for a deadlock', () => {

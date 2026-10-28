@@ -410,9 +410,14 @@ export function lateTotal(state: Pick<GameState, 'results' | 'deadlocked'>): num
   return state.results.reduce((sum, r) => sum + r.lateMinutes, 0) + (state.deadlocked ? DEADLOCK_PENALTY_MIN : 0)
 }
 
-/** 100, less the late total. */
+/** Every whole minute trains arrived ahead of time. */
+export function earlyTotal(state: Pick<GameState, 'results'>): number {
+  return state.results.reduce((sum, r) => sum + r.earlyMinutes, 0)
+}
+
+/** 100, less the late total, plus a point for every minute a train arrived early. Shown as play goes on. */
 export function levelScore(state: Pick<GameState, 'results' | 'deadlocked'>): number {
-  return 100 - lateTotal(state)
+  return 100 - lateTotal(state) + earlyTotal(state)
 }
 
 export function scoreArrival(train: Train, arrivedAtS: number, exitedAt: string): TrainResult {
@@ -422,6 +427,7 @@ export function scoreArrival(train: Train, arrivedAtS: number, exitedAt: string)
     arrivedAtS,
     dueAtS: train.dueAtS,
     lateMinutes: Math.max(0, Math.ceil((arrivedAtS - train.dueAtS) / 60)),
+    earlyMinutes: Math.max(0, Math.floor((train.dueAtS - arrivedAtS) / 60)),
     exitedAt,
     reachedDestination: exitedAt === train.destination,
   }

@@ -190,6 +190,17 @@ body,
   gap: 6px;
 }
 
+/* The score so far, just left of the page buttons. */
+.running-score {
+  align-self: center;
+  min-width: 44px;
+  padding-right: 4px;
+  text-align: right;
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 button {
   /* No double-tap zoom, so a double tap on 5× is two taps. */
   touch-action: manipulation;

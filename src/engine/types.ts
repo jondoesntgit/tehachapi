@@ -174,6 +174,8 @@ export interface TrainResult {
   dueAtS: number
   /** 0 = on time. */
   lateMinutes: number
+  /** Whole minutes it arrived before it was due (0 if on the minute or late). */
+  earlyMinutes: number
   exitedAt: string
   reachedDestination: boolean
 }
