@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
 import { canReach, findSteps, hasRoom, requestRoute } from '../src/engine/routing'
-import { ANNOUNCE_LEAD_S, buildTimetable, entryStep, isLevelComplete, quickestCrossingS, requiredTrains } from '../src/engine/scheduler'
+import { ANNOUNCE_LEAD_S, buildTimetable, entryStep, isLevelComplete, pageSpans, quickestCrossingS, requiredTrains, shortestSteps } from '../src/engine/scheduler'
 import { createInitialState, FIXED_DT_S, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, nextSteps, pathLength } from '../src/engine/trackGraph'
 import type { GameState, TrackPosition } from '../src/engine/types'
@@ -32,7 +32,7 @@ describe('level 1', () => {
       expect(lengthM).toBeLessThan(700)
     }
     expect(level.schedule).toHaveLength(30)
-    expect(level.startingTrains).toHaveLength(3)
+    expect(level.startingTrains).toHaveLength(5)
   })
 
   it('carries the line on from Marcel across page 2, in two rows, to Bakersfield', () => {
@@ -61,6 +61,49 @@ describe('level 1', () => {
     // A V of crossovers in the middle lets a train change tracks either way.
     expect(nextSteps(graph, { edgeId: 'P2_A4', direction: -1 }).map((s) => s.edgeId).sort()).toEqual(['P2_A5', 'P2_ACROSS_E'])
     expect(nextSteps(graph, { edgeId: 'P2_ADOUBLE_1', direction: -1 }).map((s) => s.edgeId).sort()).toEqual(['P2_ACROSS_W', 'P2_ADOUBLE_2'])
+  })
+
+  it('starts two trains on random page 2 sidings, one each way', () => {
+    const p2 = ['P2_ASIDING_1', 'P2_ASIDING_2', 'P2_BSIDING_1', 'P2_BSIDING_2']
+    for (let seed = 0; seed < 20; seed++) {
+      const state = createInitialState(graph, seed)
+      const l4 = state.trains.find((t) => t.id === 'L4')!
+      const l5 = state.trains.find((t) => t.id === 'L5')!
+      expect(p2).toContain(l4.path[0].edgeId)
+      expect(p2).toContain(l5.path[0].edgeId)
+      expect(l4.path[0].edgeId).not.toBe(l5.path[0].edgeId)
+      expect(canReach(graph, l4.path[0], 'EAST')).toBe(true)
+      expect(canReach(graph, l5.path[0], 'BAKERSFIELD')).toBe(true)
+    }
+  })
+
+  it('deals a timetable that never leaves either page empty, running at top speed', () => {
+    const startS = parseClock(level.startTime)
+    const spans = (seed: number) => {
+      const { timetable } = createInitialState(graph, seed)
+      const scheduled = level.schedule.flatMap((e) => {
+        const steps = shortestSteps(graph, entryStep(graph, e.entry), e.destination)!
+        return pageSpans(graph, steps, 0, e.maxSpeedMps).map((s) => ({
+          page: s.page, fromS: timetable[e.id].appearsAtS + s.fromS, toS: timetable[e.id].appearsAtS + s.toS,
+        }))
+      })
+      const starting = level.startingTrains!.flatMap((t) => {
+        const steps = shortestSteps(graph, { edgeId: t.edge, direction: t.direction }, t.destination)!
+        return pageSpans(graph, steps, getEdge(graph, t.edge).lengthM - 20, t.maxSpeedMps).map((s) => ({
+          page: s.page, fromS: startS + s.fromS, toS: startS + s.toS,
+        }))
+      })
+      return { all: [...scheduled, ...starting], lastS: Math.max(...Object.values(timetable).map((e) => e.appearsAtS)) }
+    }
+    for (let seed = 0; seed < 20; seed++) {
+      const { all, lastS } = spans(seed)
+      // From when a train brought forward could first enter with its full countdown.
+      for (let t = startS + ANNOUNCE_LEAD_S; t <= lastS; t += 60) {
+        for (const page of [1, 2]) {
+          expect(all.some((s) => s.page === page && s.fromS <= t && t < s.toS), `seed ${seed}, page ${page}, ${t}`).toBe(true)
+        }
+      }
+    }
   })
 
   it('gives trains to and from Bakersfield time to cross page 2 with traffic', () => {
@@ -166,7 +209,7 @@ describe('level 1', () => {
       // W1 stands on a siding none of the starting trains took, facing a way to its destination.
       const w1 = state.trains.find((t) => t.work)!
       expect(w1).toMatchObject({ id: 'W1', speedMps: 0, dueAtS: parseClock(level.startTime) + 65 * 60 })
-      expect(level.startingTrains![0].edgeChoices).toContain(w1.path[0].edgeId)
+      expect(level.startingTrains!.flatMap((t) => t.edgeChoices!)).toContain(w1.path[0].edgeId)
       expect(state.reservations[w1.path[0].edgeId]).toEqual(['W1'])
       expect(canReach(graph, w1.path[0], w1.destination)).toBe(true)
       sidings.add(w1.path[0].edgeId)
@@ -467,6 +510,7 @@ describe('level 1', () => {
       workTrains: false,
       minTrainsOnBoard: 0,
       minTrainsRampEveryMin: undefined,
+      keepPagesBusy: false,
       schedule: level.schedule.filter((e) => Number(e.id.slice(1)) < 19),
     })
     // Passing tracks: sidings and the main beside them, and both tracks of page 2's double track.
@@ -510,7 +554,7 @@ describe('level 1', () => {
     expect(isLevelComplete(state)).toBe(true)
     expect(state.deadlocked || state.stalled).toBe(false)
     expect(state.results.map((r) => r.trainId).sort()).toEqual([
-      'L1', 'L2', 'L3', 'T1', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16', 'T17', 'T18', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
+      'L1', 'L2', 'L3', 'L4', 'L5', 'T1', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16', 'T17', 'T18', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
     ])
     expect(state.results.every((r) => r.reachedDestination)).toBe(true)
     expect(state.results.filter((r) => r.lateMinutes > 0)).toEqual([])

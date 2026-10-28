@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
-import { announcedTrains, ANNOUNCE_LEAD_S, earlyTotal, entryStep, heldAtPortal, isLevelComplete, lateTotal, levelScore, workTrainHeld } from '../src/engine/scheduler'
+import { announcedTrains, ANNOUNCE_LEAD_S, earlyTotal, entryStep, heldAtPortal, isLevelComplete, lateTotal, levelScore, pageSpans, workTrainHeld } from '../src/engine/scheduler'
 import { canReach, isDeadlocked, requestRoute } from '../src/engine/routing'
 import { createInitialState, skipToNextArrival, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, type TrackGraph } from '../src/engine/trackGraph'
@@ -445,5 +445,15 @@ describe('idle limit', () => {
     const state = runUntil(empty, createInitialState(empty), (s) => s.timeS >= parseClock('10:30'))
     expect(state.idleSinceS).toBeNull()
     expect(state.stalled).toBe(false)
+  })
+})
+
+describe('pageSpans', () => {
+  it('times a train across the map at top speed, from head in to tail out', () => {
+    const steps = ['M1', 'M2', 'M3', 'M4', 'M5'].map((edgeId) => ({ edgeId, direction: 1 as const }))
+    const lengthM = steps.reduce((sum, s) => sum + graph.edges.get(s.edgeId)!.lengthM, 0)
+    expect(pageSpans(graph, steps, 0, 10)).toEqual([{ page: 1, fromS: 0, toS: (lengthM + level.trainLengthM) / 10 }])
+    // Already 1000 m in: it is there now, and out sooner.
+    expect(pageSpans(graph, steps, 1000, 10)).toEqual([{ page: 1, fromS: 0, toS: (lengthM + level.trainLengthM - 1000) / 10 }])
   })
 })

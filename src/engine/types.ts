@@ -121,6 +121,11 @@ export interface Level {
   minTrainsOnBoard?: number
   /** Raise `minTrainsOnBoard` by one every this many minutes (see `requiredTrains`). */
   minTrainsRampEveryMin?: number
+  /**
+   * Bring scheduled trains in early so that, were every train to run straight across at top speed,
+   * no page of the map would ever stand empty (see `keepPagesBusy`).
+   */
+  keepPagesBusy?: boolean
   /** End the game if trains are on the board but none has moved for this many minutes. */
   idleLimitMin?: number
 }

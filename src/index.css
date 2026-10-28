@@ -81,6 +81,17 @@ body,
   stroke: var(--terminal-color, var(--muted));
 }
 
+/* A work train blinks slowly. */
+.train-work {
+  animation: work-blink 2.4s ease-in-out infinite;
+}
+
+@keyframes work-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
 /* The line carries on on the other page. */
 .portal-link {
   stroke-dasharray: 4 4;

@@ -5,6 +5,7 @@ import { isDeadlocked } from './routing'
 import {
   buildTimetable,
   buildWorkTimetable,
+  keepPagesBusy,
   keepTrainsInPlay,
   placeWorkTrainOnSiding,
   nextArrivalS,
@@ -21,12 +22,18 @@ export const FIXED_DT_S = 0.1
 
 /**
  * A fresh game. `seed` randomizes when scheduled trains enter (`buildTimetable`, then
- * `keepTrainsInPlay`), the work trains (`placeWorkTrainOnSiding`, `buildWorkTimetable`) and where
+ * `keepTrainsInPlay`, `keepPagesBusy`), the work trains (`placeWorkTrainOnSiding`, `buildWorkTimetable`) and where
  * starting trains stand (`placeStartingTrains`). Nothing later changes when a train is due to enter.
  */
 export function createInitialState(graph: TrackGraph, seed?: number): GameState {
   // Every entry time is fixed here, from the seed alone, so it never depends on how the game is played.
-  const timetable = keepTrainsInPlay(graph, buildTimetable(graph, seed))
+  // Both adjustments only bring trains in earlier, so alternating them settles quickly.
+  let timetable = keepTrainsInPlay(graph, buildTimetable(graph, seed))
+  for (let i = 0; i < 20; i++) {
+    const settled = keepTrainsInPlay(graph, keepPagesBusy(graph, timetable))
+    if (JSON.stringify(settled) === JSON.stringify(timetable)) break
+    timetable = settled
+  }
   return {
     timeS: parseClock(graph.level.startTime),
     ...placeWorkTrainOnSiding(graph, seed ?? 0, placeStartingTrains(graph, seed)),

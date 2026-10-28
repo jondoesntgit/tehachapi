@@ -114,20 +114,124 @@ export function requiredTrains(graph: TrackGraph, timeS: number): number {
 
 /** Length of the shortest way in through `entry` and out through `destination`, or null if none. */
 export function shortestCrossingM(graph: TrackGraph, entry: string, destination: string): number | null {
+  const steps = shortestSteps(graph, entryStep(graph, entry), destination)
+  return steps && steps.reduce((sum, s) => sum + getEdge(graph, s.edgeId).lengthM, 0)
+}
+
+/** The shortest way from `first` (included) out through terminal `destination`, or null if there is none. */
+export function shortestSteps(graph: TrackGraph, first: RouteStep, destination: string): RouteStep[] | null {
   // Dijkstra over (edge, direction); a step's distance is measured to its far end.
-  const first = entryStep(graph, entry)
-  const best = new Map<string, number>()
-  const queue: { step: RouteStep; distM: number }[] = [{ step: first, distM: getEdge(graph, first.edgeId).lengthM }]
+  const key = (s: RouteStep) => `${s.edgeId}:${s.direction}`
+  const prev = new Map<string, RouteStep | null>()
+  const queue: { step: RouteStep; distM: number; via: RouteStep | null }[] = [
+    { step: first, distM: getEdge(graph, first.edgeId).lengthM, via: null },
+  ]
   while (queue.length > 0) {
     queue.sort((a, b) => a.distM - b.distM)
-    const { step, distM } = queue.shift()!
-    const key = `${step.edgeId}:${step.direction}`
-    if (best.has(key)) continue
-    best.set(key, distM)
-    if (stepEndNode(getEdge(graph, step.edgeId), step.direction) === destination) return distM
-    for (const next of nextSteps(graph, step)) queue.push({ step: next, distM: distM + getEdge(graph, next.edgeId).lengthM })
+    const { step, distM, via } = queue.shift()!
+    if (prev.has(key(step))) continue
+    prev.set(key(step), via)
+    if (stepEndNode(getEdge(graph, step.edgeId), step.direction) === destination) {
+      const steps: RouteStep[] = []
+      for (let s: RouteStep | null = step; s; s = prev.get(key(s)) ?? null) steps.unshift(s)
+      return steps
+    }
+    for (const next of nextSteps(graph, step)) {
+      queue.push({ step: next, distM: distM + getEdge(graph, next.edgeId).lengthM, via: step })
+    }
   }
   return null
+}
+
+/** A stretch of time a train would spend on one page of the map. */
+export interface PageSpan {
+  page: number
+  fromS: number
+  toS: number
+}
+
+/**
+ * When a train would be on each page, in seconds from now, were it to run its shortest way out at
+ * top speed with its head `headM` along `steps` now: a page counts from the head reaching it until
+ * the tail leaves it.
+ */
+export function pageSpans(graph: TrackGraph, steps: readonly RouteStep[], headM: number, speedMps: number): PageSpan[] {
+  const pageOf = new Map(graph.level.edges.map((e) => [e.id, e.page ?? 1]))
+  const spans: PageSpan[] = []
+  let startM = 0
+  for (const step of steps) {
+    const lengthM = getEdge(graph, step.edgeId).lengthM
+    const page = pageOf.get(step.edgeId) ?? 1
+    const fromS = Math.max(0, (startM - headM) / speedMps)
+    const toS = Math.max(0, (startM + lengthM + graph.level.trainLengthM - headM) / speedMps)
+    startM += lengthM
+    if (toS <= 0) continue
+    const last = spans[spans.length - 1]
+    if (last && last.page === page) last.toS = Math.max(last.toS, toS)
+    else spans.push({ page, fromS, toS })
+  }
+  return spans
+}
+
+/**
+ * Brings scheduled trains in early so that no page of the map stands empty from the start until
+ * the last train enters, judged as if every train ran straight across at top speed (`pageSpans`).
+ * While a page would be empty at some minute, the next train due onto it is moved to arrive there
+ * then, its due time moving with it, as long as that leaves it its full countdown from the start. Like
+ * `keepTrainsInPlay`, it only reads the timetable, never the board.
+ */
+export function keepPagesBusy(
+  graph: TrackGraph,
+  timetable: Record<string, TimetableEntry>,
+): Record<string, TimetableEntry> {
+  const pages = [...new Set(graph.level.edges.map((e) => e.page ?? 1))]
+  if (!graph.level.keepPagesBusy || pages.length < 2) return timetable
+  const startS = parseClock(graph.level.startTime)
+  const next = { ...timetable }
+  const ids = Object.keys(next)
+  // Spans from each train's entry, which moving the entry doesn't change.
+  const spansOf = Object.fromEntries(
+    ids.map((id) => {
+      const entry = getScheduleEntry(graph, id)
+      const steps = shortestSteps(graph, entryStep(graph, entry.entry), entry.destination) ?? []
+      return [id, pageSpans(graph, steps, 0, entry.maxSpeedMps)]
+    }),
+  )
+  // Starting trains are on the board from the start.
+  const fixed = (graph.level.startingTrains ?? []).flatMap((start) => {
+    const edge = getEdge(graph, start.edge)
+    const steps = shortestSteps(graph, { edgeId: start.edge, direction: start.direction }, start.destination) ?? []
+    return pageSpans(graph, steps, edge.lengthM - STOP_CLEARANCE_M, start.maxSpeedMps).map((span) => ({
+      page: span.page,
+      fromS: startS + span.fromS,
+      toS: startS + span.toS,
+    }))
+  })
+  const lastS = Math.max(...ids.map((id) => next[id].appearsAtS))
+  for (let t = startS; t <= lastS; t += 60) {
+    for (const page of pages) {
+      const covered =
+        fixed.some((s) => s.page === page && s.fromS <= t && t < s.toS) ||
+        ids.some((id) =>
+          spansOf[id].some((s) => s.page === page && next[id].appearsAtS + s.fromS <= t && t < next[id].appearsAtS + s.toS),
+        )
+      if (covered) continue
+      // The next train that would come onto this page after t.
+      const arrivals = ids.flatMap((id) => {
+        const span = spansOf[id].find((s) => s.page === page && next[id].appearsAtS + s.fromS > t)
+        return span ? [{ id, offsetS: span.fromS, atS: next[id].appearsAtS + span.fromS }] : []
+      })
+      arrivals.sort((a, b) => a.atS - b.atS || ids.indexOf(a.id) - ids.indexOf(b.id))
+      // Only one that can be there by t and still get its full countdown from the start; if none
+      // can, the gap stays.
+      const first = arrivals.find((a) => t - a.offsetS >= startS + ANNOUNCE_LEAD_S)
+      if (!first) continue
+      const { appearsAtS, dueAtS } = next[first.id]
+      const movedS = Math.floor((t - first.offsetS) / 60) * 60
+      next[first.id] = { appearsAtS: movedS, dueAtS: dueAtS - (appearsAtS - movedS) }
+    }
+  }
+  return next
 }
 
 /**

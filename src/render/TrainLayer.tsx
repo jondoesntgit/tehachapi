@@ -35,7 +35,8 @@ export function TrainLayer() {
             {runs.map((run, i) => (
               <polyline
                 key={i}
-                className={selected ? 'train train-selected' : 'train'}
+                // A work train blinks slowly.
+                className={['train', selected && 'train-selected', train.work && 'train-work'].filter(Boolean).join(' ')}
                 style={{ '--train-color': trainColor(graph, train) } as CSSProperties}
                 points={viewPointsAttr(run)}
               />
