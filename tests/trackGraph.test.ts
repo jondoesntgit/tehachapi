@@ -8,6 +8,7 @@ import {
   pathPolyline,
   pointAt,
 } from '../src/engine/trackGraph'
+import { hasRoom } from '../src/engine/routing'
 import type { RouteStep } from '../src/engine/types'
 import { graph, level } from './helpers'
 
@@ -105,6 +106,10 @@ describe('links between pages', () => {
     expect(nextSteps(g, { edgeId: 'P2', direction: 1 })).toEqual([{ edgeId: 'M1', direction: 1 }])
     // The link is no end of the line: nothing stops there.
     expect(nextSteps(g, { edgeId: 'P2', direction: -1 })).toEqual([])
+    // The blocks either side of a link are one section: neither is somewhere to stop short of it.
+    expect(hasRoom(g, { edgeId: 'M1', direction: -1 })).toBe(false)
+    expect(hasRoom(g, { edgeId: 'P2', direction: 1 })).toBe(false)
+    expect(hasRoom(g, { edgeId: 'P2', direction: -1 })).toBe(true)
   })
 
   it('rejects links that are not link nodes, unjoined link nodes, and links with more than one edge', () => {

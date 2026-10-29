@@ -102,7 +102,11 @@ export function findSteps(
 /** Whether a train can stop at the far end of `step`'s block without fouling the switch behind it. */
 export function hasRoom(graph: TrackGraph, step: RouteStep): boolean {
   const edge = getEdge(graph, step.edgeId)
-  if (getNode(graph, stepEndNode(edge, step.direction)).kind === 'terminal') return true
+  const end = getNode(graph, stepEndNode(edge, step.direction)).kind
+  if (end === 'terminal') return true
+  // The blocks either side of a link are one section: a train runs on through to the far one, so
+  // two trains heading opposite ways can never meet nose to nose across the join.
+  if (end === 'link') return false
   return edge.lengthM >= graph.level.trainLengthM + 2 * STOP_CLEARANCE_M
 }
 

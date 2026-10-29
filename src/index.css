@@ -201,6 +201,14 @@ body,
   gap: 6px;
 }
 
+/* "SCORE", small, ahead of the number. */
+.running-score-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
 /* The score so far, just left of the page buttons. */
 .running-score {
   align-self: center;

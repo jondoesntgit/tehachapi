@@ -66,7 +66,7 @@ export function Hud() {
         <div className="buttons">
           {/* The score so far: 100, less minutes late, plus minutes early. */}
           <div className="running-score" aria-label="Score">
-            {levelScore(game)}
+            <span className="running-score-label">SCORE</span> {levelScore(game)}
           </div>
           {pageCount(graph) > 1 &&
             // Highest page first: P2 sits left of P1.
