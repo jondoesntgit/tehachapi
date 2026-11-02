@@ -30,7 +30,7 @@ describe('level 1', () => {
       expect(lengthM).toBeGreaterThanOrEqual(level.trainLengthM + 40)
       expect(lengthM).toBeLessThan(700)
     }
-    expect(level.schedule).toHaveLength(30)
+    expect(level.schedule).toHaveLength(25)
     expect(level.startingTrains).toHaveLength(5)
   })
 
@@ -256,12 +256,12 @@ describe('level 1', () => {
     expect(seen.size).toBeGreaterThan(2)
   })
 
-  it('sends three waves of four trains, from every terminal, each to a terminal it can reach', () => {
+  it('sends three waves of three trains, one from each terminal, each to a terminal it can reach', () => {
     const terminals = ['BAKERSFIELD', 'EAST', 'SOUTHEAST']
     const waves = [['10:27', '10:30'], ['10:45', '10:47'], ['11:27', '11:38']]
     for (const [i, window] of waves.entries()) {
       const wave = level.schedule.filter((e) => Number(e.id.slice(1)) >= 19 + 4 * i && Number(e.id.slice(1)) < 23 + 4 * i)
-      expect([...new Set(wave.map((e) => e.entry))].sort()).toEqual(terminals)
+      expect(wave.map((e) => e.entry).sort()).toEqual(terminals)
       for (const e of wave) {
         expect(e.appearsBetween).toEqual(window)
         expect(e.destination).not.toBe(e.entry)
@@ -418,11 +418,10 @@ describe('level 1', () => {
       T7: ['10:30', '11:30'], T8: ['10:30', '11:30'], T9: ['10:30', '11:30'],
       T10: ['10:00', '11:00'], T11: ['10:30', '11:30'], T12: ['10:30', '11:15'],
       T13: ['10:45', '11:40'],
-      T14: ['10:20', '11:45'], T15: ['10:30', '11:55'],
       T16: ['09:55', '10:53'], T17: ['09:55', '10:53'], T18: ['09:55', '10:53'],
-      ...Object.fromEntries(['T19', 'T20', 'T21', 'T22'].map((id) => [id, ['10:27', '10:30']])),
-      ...Object.fromEntries(['T23', 'T24', 'T25', 'T26'].map((id) => [id, ['10:45', '10:47']])),
-      ...Object.fromEntries(['T27', 'T28', 'T29', 'T30'].map((id) => [id, ['11:27', '11:38']])),
+      ...Object.fromEntries(['T19', 'T20', 'T21'].map((id) => [id, ['10:27', '10:30']])),
+      ...Object.fromEntries(['T23', 'T24', 'T25'].map((id) => [id, ['10:45', '10:47']])),
+      ...Object.fromEntries(['T27', 'T28', 'T29'].map((id) => [id, ['11:27', '11:38']])),
     }
     const seen: Record<string, Set<number>> = {}
     for (let seed = 0; seed < 200; seed++) {
@@ -447,10 +446,10 @@ describe('level 1', () => {
     expect(seen.T11.size).toBeGreaterThan(50)
   })
 
-  it('sends trains to Mojave, five of them up from Bakersfield', () => {
+  it('sends trains to Mojave, four of them up from Bakersfield', () => {
     const south = level.schedule.filter((e) => e.destination === 'SOUTHEAST')
     expect(south.map((e) => [e.id, e.entry])).toEqual([
-      ['T10', 'BAKERSFIELD'], ['T11', 'BAKERSFIELD'], ['T17', 'BAKERSFIELD'], ['T22', 'BAKERSFIELD'], ['T23', 'BAKERSFIELD'], ['T28', 'EAST'],
+      ['T10', 'BAKERSFIELD'], ['T11', 'BAKERSFIELD'], ['T17', 'BAKERSFIELD'], ['T23', 'BAKERSFIELD'], ['T28', 'EAST'],
     ])
     expect(graph.nodes.get('SOUTHEAST')?.color).toBeDefined()
   })
@@ -483,9 +482,8 @@ describe('level 1', () => {
     expect([...graph.edges.keys()].some((id) => id.startsWith('SW') && !id.startsWith('SW_'))).toBe(false)
     expect(getEdge(graph, 'M3')).toMatchObject({ from: 'SW_A2', to: 'SW_B1' })
     expect(nextSteps(graph, { edgeId: 'M3', direction: -1 })).toHaveLength(2)
-    const t14 = level.schedule.find((e) => e.id === 'T14')!
-    const t15 = level.schedule.find((e) => e.id === 'T15')!
-    expect([t14.entry, t14.destination, t15.entry, t15.destination]).toEqual(['EAST', 'BAKERSFIELD', 'BAKERSFIELD', 'EAST'])
+    const t18 = level.schedule.find((e) => e.id === 'T18')!
+    expect([t18.entry, t18.destination]).toEqual(['SOUTHEAST', 'BAKERSFIELD'])
   })
 
   it('treats the blocks either side of Marcel as one section, so opposing trains never meet across it', () => {
@@ -528,11 +526,13 @@ describe('level 1', () => {
     // Without the minimum in play, which would bring trains in sooner.
     const graph = buildGraph({ ...level, minTrainsOnBoard: 0, minTrainsRampEveryMin: undefined })
     const state = createInitialState(graph, 42)
-    const t1 = state.timetable.T1.appearsAtS
-    const before = runUntil(graph, state, (s) => s.timeS >= t1 - 1)
-    expect(has('T1')(before)).toBe(false)
-    const after = runUntil(graph, before, has('T1'), 5)
-    expect(after.trains.find((t) => t.id === 'T1')!.dueAtS).toBe(state.timetable.T1.dueAtS)
+    // The first train of the game, so nothing sits in its entry block.
+    const [first] = Object.entries(state.timetable).sort((a, b) => a[1].appearsAtS - b[1].appearsAtS)[0]
+    const atS = state.timetable[first].appearsAtS
+    const before = runUntil(graph, state, (s) => s.timeS >= atS - 1)
+    expect(has(first)(before)).toBe(false)
+    const after = runUntil(graph, before, has(first), 5)
+    expect(after.trains.find((t) => t.id === first)!.dueAtS).toBe(state.timetable[first].dueAtS)
   })
 
   it('plays the written timetable through on time, hopping trains from one passing track to the next', () => {
@@ -588,7 +588,7 @@ describe('level 1', () => {
     expect(isLevelComplete(state)).toBe(true)
     expect(state.deadlocked || state.stalled).toBe(false)
     expect(state.results.map((r) => r.trainId).sort()).toEqual([
-      'L1', 'L2', 'L3', 'L4', 'L5', 'T1', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16', 'T17', 'T18', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
+      'L1', 'L2', 'L3', 'L4', 'L5', 'T1', 'T10', 'T11', 'T12', 'T13', 'T16', 'T17', 'T18', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9',
     ])
     expect(state.results.every((r) => r.reachedDestination)).toBe(true)
     expect(state.results.filter((r) => r.lateMinutes > 0)).toEqual([])
