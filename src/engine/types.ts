@@ -126,6 +126,11 @@ export interface Level {
    * no page of the map would ever stand empty (see `keepPagesBusy`).
    */
   keepPagesBusy?: boolean
+  /**
+   * Least time, in minutes, between two scheduled trains entering at the same terminal, so one has
+   * left its entry block before the next arrives (see `spreadEntries`).
+   */
+  entryHeadwayMin?: number
   /** End the game if trains are on the board but none has moved for this many minutes. */
   idleLimitMin?: number
 }

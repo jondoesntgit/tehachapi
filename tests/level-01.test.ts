@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseClock } from '../src/engine/clock'
 import { canReach, findSteps, hasRoom, requestRoute } from '../src/engine/routing'
-import { ANNOUNCE_LEAD_S, buildTimetable, entryStep, isLevelComplete, pageSpans, quickestCrossingS, requiredTrains, shortestSteps } from '../src/engine/scheduler'
+import { ANNOUNCE_LEAD_S, buildTimetable, entryStep, isLevelComplete, pageSpans, quickestCrossingS, requiredTrains, shortestSteps, spreadEntries } from '../src/engine/scheduler'
 import { createInitialState, FIXED_DT_S, step } from '../src/engine/simulation'
 import { buildGraph, getEdge, locateOnPath, nextSteps, pathLength } from '../src/engine/trackGraph'
 import type { GameState, TrackPosition } from '../src/engine/types'
@@ -103,6 +103,31 @@ describe('level 1', () => {
         }
       }
     }
+  })
+
+  it('spreads entries at each terminal at least 5 minutes apart, keeping each train its time allowance', () => {
+    expect(level.entryHeadwayMin).toBe(5)
+    let pushed = 0
+    for (let seed = 0; seed < 20; seed++) {
+      const built = buildTimetable(graph, seed)
+      const spread = spreadEntries(graph, built)
+      const { timetable } = createInitialState(graph, seed)
+      for (const id of Object.keys(built)) {
+        // Spreading only ever moves a train later, and its due time with it.
+        expect(spread[id].appearsAtS).toBeGreaterThanOrEqual(built[id].appearsAtS)
+        if (spread[id].appearsAtS > built[id].appearsAtS) pushed++
+        expect(timetable[id].dueAtS - timetable[id].appearsAtS).toBe(built[id].dueAtS - built[id].appearsAtS)
+      }
+      // In the dealt game no two trains enter at the same terminal within 5 minutes.
+      for (const terminal of ['BAKERSFIELD', 'EAST', 'SOUTHEAST']) {
+        const times = level.schedule
+          .filter((e) => e.entry === terminal)
+          .map((e) => timetable[e.id].appearsAtS)
+          .sort((a, b) => a - b)
+        for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1], `seed ${seed} at ${terminal}`).toBeGreaterThanOrEqual(5 * 60)
+      }
+    }
+    expect(pushed).toBeGreaterThan(0)
   })
 
   it('gives trains to and from Bakersfield time to cross page 2 with traffic', () => {
@@ -269,7 +294,8 @@ describe('level 1', () => {
   it('brings trains forward with a full 10-minute countdown, keeping their time allowance', () => {
     let moved = 0
     for (let seed = 0; seed < 20; seed++) {
-      const written = buildTimetable(graph, seed)
+      // As spread out at each terminal, before any are brought forward.
+      const written = spreadEntries(graph, buildTimetable(graph, seed))
       const { timetable } = createInitialState(graph, seed)
       for (const id of Object.keys(written)) {
         if (timetable[id].appearsAtS === written[id].appearsAtS) continue
@@ -518,6 +544,7 @@ describe('level 1', () => {
       minTrainsOnBoard: 0,
       minTrainsRampEveryMin: undefined,
       keepPagesBusy: false,
+      entryHeadwayMin: undefined,
       schedule: level.schedule.filter((e) => Number(e.id.slice(1)) < 19),
     })
     // Passing tracks: sidings and the main beside them, and both tracks of page 2's double track.

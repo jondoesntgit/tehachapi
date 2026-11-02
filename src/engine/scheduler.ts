@@ -143,6 +143,118 @@ export function shortestSteps(graph: TrackGraph, first: RouteStep, destination: 
   return null
 }
 
+const crossingCache = new WeakMap<TrackGraph, Record<string, number>>()
+const spansCache = new WeakMap<TrackGraph, Record<string, PageSpan[]>>()
+
+/** Schedule entry id -> `quickestCrossingS`; fixed for a layout, so worked out once. */
+function crossingTimes(graph: TrackGraph): Record<string, number> {
+  let times = crossingCache.get(graph)
+  if (!times) {
+    times = Object.fromEntries(graph.level.schedule.map((e) => [e.id, quickestCrossingS(graph, e)]))
+    crossingCache.set(graph, times)
+  }
+  return times
+}
+
+/** Schedule entry id -> its `pageSpans` from entering; fixed for a layout, so worked out once. */
+function entrySpans(graph: TrackGraph): Record<string, PageSpan[]> {
+  let spans = spansCache.get(graph)
+  if (!spans) {
+    spans = Object.fromEntries(
+      graph.level.schedule.map((e) => {
+        const steps = shortestSteps(graph, entryStep(graph, e.entry), e.destination) ?? []
+        return [e.id, pageSpans(graph, steps, 0, e.maxSpeedMps)]
+      }),
+    )
+    spansCache.set(graph, spans)
+  }
+  return spans
+}
+
+/** The level's least gap between entries at one terminal, in seconds (0 if it sets none). */
+function entryHeadwayS(graph: TrackGraph): number {
+  return (graph.level.entryHeadwayMin ?? 0) * 60
+}
+
+const entryTerminals = new WeakMap<TrackGraph, Map<string, string>>()
+
+/** Schedule entry id -> the terminal it enters at. */
+function entryTerminalOf(graph: TrackGraph): Map<string, string> {
+  let map = entryTerminals.get(graph)
+  if (!map) {
+    map = new Map(graph.level.schedule.map((e) => [e.id, e.entry]))
+    entryTerminals.set(graph, map)
+  }
+  return map
+}
+
+/** Whether another scheduled train enters at `id`'s terminal within the headway of `atS`. */
+function clashes(graph: TrackGraph, timetable: Record<string, TimetableEntry>, id: string, atS: number): boolean {
+  const entryOf = entryTerminalOf(graph)
+  const entry = entryOf.get(id)
+  const headwayS = entryHeadwayS(graph)
+  for (const other in timetable) {
+    if (other !== id && entryOf.get(other) === entry && Math.abs(timetable[other].appearsAtS - atS) < headwayS) return true
+  }
+  return false
+}
+
+/**
+ * Where to bring `id` in early, wanting `wantedS`, so that no other train enters at its terminal
+ * within the headway: the latest free whole minute from `wantedS` back to `earliestS` (a little
+ * earlier still serves), else the earliest one after `wantedS` that is still sooner than it enters
+ * now, else where it enters now (it isn't moved).
+ */
+function latestFreeSlot(
+  graph: TrackGraph,
+  timetable: Record<string, TimetableEntry>,
+  id: string,
+  wantedS: number,
+  earliestS: number,
+): number {
+  const inTime = freeSlotBy(graph, timetable, id, wantedS, earliestS)
+  if (inTime !== null) return inTime
+  for (let s = wantedS + 60; s < timetable[id].appearsAtS; s += 60) if (!clashes(graph, timetable, id, s)) return s
+  return timetable[id].appearsAtS
+}
+
+/** The latest whole minute from `wantedS` back to `earliestS` free of headway clashes for `id`, or null. */
+function freeSlotBy(
+  graph: TrackGraph,
+  timetable: Record<string, TimetableEntry>,
+  id: string,
+  wantedS: number,
+  earliestS: number,
+): number | null {
+  for (let s = wantedS; s >= earliestS; s -= 60) if (!clashes(graph, timetable, id, s)) return s
+  return null
+}
+
+/**
+ * Spreads out entries at each terminal: walking the timetable in order, a train due to enter less
+ * than the level's `entryHeadwayMin` after the one before it at the same terminal is moved later, to
+ * that headway, its due time moving with it. The train before then has time to leave its entry
+ * block, so trains aren't left queuing at the portal. Reads only the timetable, never the board.
+ */
+export function spreadEntries(
+  graph: TrackGraph,
+  timetable: Record<string, TimetableEntry>,
+): Record<string, TimetableEntry> {
+  const headwayS = entryHeadwayS(graph)
+  if (headwayS <= 0) return timetable
+  const next = { ...timetable }
+  const ids = Object.keys(next).sort((a, b) => next[a].appearsAtS - next[b].appearsAtS)
+  const lastAt = new Map<string, number>()
+  for (const id of ids) {
+    const entry = getScheduleEntry(graph, id).entry
+    const earliestS = (lastAt.get(entry) ?? -Infinity) + headwayS
+    const { appearsAtS, dueAtS } = next[id]
+    if (appearsAtS < earliestS) next[id] = { appearsAtS: earliestS, dueAtS: dueAtS + (earliestS - appearsAtS) }
+    lastAt.set(entry, next[id].appearsAtS)
+  }
+  return next
+}
+
 /** A stretch of time a train would spend on one page of the map. */
 export interface PageSpan {
   page: number
@@ -190,13 +302,7 @@ export function keepPagesBusy(
   const next = { ...timetable }
   const ids = Object.keys(next)
   // Spans from each train's entry, which moving the entry doesn't change.
-  const spansOf = Object.fromEntries(
-    ids.map((id) => {
-      const entry = getScheduleEntry(graph, id)
-      const steps = shortestSteps(graph, entryStep(graph, entry.entry), entry.destination) ?? []
-      return [id, pageSpans(graph, steps, 0, entry.maxSpeedMps)]
-    }),
-  )
+  const spansOf = entrySpans(graph)
   // Starting trains are on the board from the start.
   const fixed = (graph.level.startingTrains ?? []).flatMap((start) => {
     const edge = getEdge(graph, start.edge)
@@ -223,12 +329,18 @@ export function keepPagesBusy(
       })
       arrivals.sort((a, b) => a.atS - b.atS || ids.indexOf(a.id) - ids.indexOf(b.id))
       // Only one that can be there by t and still get its full countdown from the start; if none
-      // can, the gap stays.
-      const first = arrivals.find((a) => t - a.offsetS >= startS + ANNOUNCE_LEAD_S)
-      if (!first) continue
-      const { appearsAtS, dueAtS } = next[first.id]
-      const movedS = Math.floor((t - first.offsetS) / 60) * 60
-      next[first.id] = { appearsAtS: movedS, dueAtS: dueAtS - (appearsAtS - movedS) }
+      // can, the gap stays. Prefer the first that can also keep the spacing at its terminal.
+      const earliestS = startS + ANNOUNCE_LEAD_S
+      const able = arrivals.filter((a) => t - a.offsetS >= earliestS)
+      if (able.length === 0) continue
+      const wanted = (a: { offsetS: number }) => Math.floor((t - a.offsetS) / 60) * 60
+      const spaced = able
+        .map((a) => ({ id: a.id, slot: freeSlotBy(graph, next, a.id, wanted(a), earliestS) }))
+        .find((a) => a.slot !== null)
+      const id = spaced?.id ?? able[0].id
+      const movedS = spaced?.slot ?? latestFreeSlot(graph, next, id, wanted(able[0]), earliestS)
+      const { appearsAtS, dueAtS } = next[id]
+      next[id] = { appearsAtS: movedS, dueAtS: dueAtS - (appearsAtS - movedS) }
     }
   }
   return next
@@ -262,7 +374,7 @@ export function keepTrainsInPlay(
   if (!graph.level.minTrainsOnBoard) return timetable
   const next = { ...timetable }
   const ids = Object.keys(next)
-  const crossingS = Object.fromEntries(ids.map((id) => [id, quickestCrossingS(graph, getScheduleEntry(graph, id))]))
+  const crossingS = crossingTimes(graph)
   const lastS = Math.max(...ids.map((id) => next[id].appearsAtS))
   const startingDueS = (graph.level.startingTrains ?? []).map((start) => parseClock(start.dueAt))
   for (let t = parseClock(graph.level.startTime); t <= lastS; t += 60) {
@@ -276,7 +388,8 @@ export function keepTrainsInPlay(
       .slice(0, Math.max(0, requiredTrains(graph, t) - inPlay))
     for (const id of later) {
       const { appearsAtS, dueAtS } = next[id]
-      next[id] = { appearsAtS: announceByS, dueAtS: dueAtS - (appearsAtS - announceByS) }
+      const movedS = latestFreeSlot(graph, next, id, announceByS, parseClock(graph.level.startTime) + ANNOUNCE_LEAD_S)
+      next[id] = { appearsAtS: movedS, dueAtS: dueAtS - (appearsAtS - movedS) }
     }
   }
   return next

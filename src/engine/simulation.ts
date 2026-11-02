@@ -11,6 +11,7 @@ import {
   nextArrivalS,
   placeStartingTrains,
   scoreArrival,
+  spreadEntries,
   spawnDue,
   spawnWorkTrain,
 } from './scheduler'
@@ -22,13 +23,15 @@ export const FIXED_DT_S = 0.1
 
 /**
  * A fresh game. `seed` randomizes when scheduled trains enter (`buildTimetable`, then
- * `keepTrainsInPlay`, `keepPagesBusy`), the work trains (`placeWorkTrainOnSiding`, `buildWorkTimetable`) and where
+ * `spreadEntries`, `keepTrainsInPlay`, `keepPagesBusy`), the work trains (`placeWorkTrainOnSiding`, `buildWorkTimetable`) and where
  * starting trains stand (`placeStartingTrains`). Nothing later changes when a train is due to enter.
  */
 export function createInitialState(graph: TrackGraph, seed?: number): GameState {
   // Every entry time is fixed here, from the seed alone, so it never depends on how the game is played.
-  // Both adjustments only bring trains in earlier, so alternating them settles quickly.
-  let timetable = keepTrainsInPlay(graph, buildTimetable(graph, seed))
+  // Spread out entries at each terminal, then bring trains in early where the board or a page would
+  // run short. Both of those only bring trains in earlier, into gaps that keep the spacing, so
+  // alternating them settles quickly.
+  let timetable = keepTrainsInPlay(graph, spreadEntries(graph, buildTimetable(graph, seed)))
   for (let i = 0; i < 20; i++) {
     const settled = keepTrainsInPlay(graph, keepPagesBusy(graph, timetable))
     if (JSON.stringify(settled) === JSON.stringify(timetable)) break

@@ -9,6 +9,7 @@
   "minTrainsOnBoard": 4,
   "minTrainsRampEveryMin": 15,
   "keepPagesBusy": true,
+  "entryHeadwayMin": 5,
   "idleLimitMin": 20,
   "nodes": [
     {"id": "WEST", "x": 0, "y": 0, "kind": "link", "label": "Marcel", "color": "#ff9640"},
